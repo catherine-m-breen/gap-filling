@@ -1,0 +1,1 @@
+Initial codebase to identify the relationship across sensors for predicting SWE (and possibly snow depth) in trees
