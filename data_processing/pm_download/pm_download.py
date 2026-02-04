@@ -6,6 +6,9 @@
 
 ###### example download: 
 ###### python download.py --path /Users/cmbreen/Documents/snow/gap_filling/processed/ndsi_regridded_to_aso.tif --time_start 2019-03-17 --filter "*N3.125km*_37H_*,*N3.125km*_37V_*,*N6.25km*_19H_*,*N6.25km*_19V_*"
+###### python download.py --path /discover/nobackup/cmbreen/aso_data/swe_tifs/colorado --time_start 2019-03-17 --filter "*N3.125km*_37H_*,*N3.125km*_37V_*,*N6.25km*_19H_*,*N6.25km*_19V_*"
+
+
 
 from __future__ import print_function
 
@@ -749,8 +752,8 @@ Examples:
     parser.add_argument(
         '--output',
         type=str,
-        default='./nsidc_data',
-        help='Output directory for downloaded files (default: ./nsidc_data)'
+        default='./nsidc_pm_data',
+        help='Output directory for downloaded files (default: ./nsidc_pm_data)'
     )
     
     # Download options
