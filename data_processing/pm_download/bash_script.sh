@@ -1,18 +1,16 @@
-
-python pm_download.py --path /discover/nobackup/cmbreen/aso_data/swe_tifs/colorado/ASO_50M_SWE_USCOBR_20190419.tif --time_start 2019-04-19 --filter "*N3.125km*_37H_*,*N3.125km*_37V_*,*N6.25km*_19H_*,*N6.25km*_19V_*"
-
-
+#python pm_download.py --path /discover/nobackup/cmbreen/aso_data/swe_tifs/colorado/ASO_50M_SWE_USCOBR_20190419.tif --time_start 2019-04-19 --filter "*_N3.125km_F18_SSMIS_E_37H_*,*_N3.125km_F18_SSMIS_E_37V_*,*_N6.25km_F18_SSMIS_E_19H_*,*_N6.25km_F18_SSMIS_E_19V_*" --output nsidc_pm_data/ASO_50M_SWE_USCOBR_20190419
 
 #!/bin/bash
+## There is a .netrc file in the discover home directory and in the local home directory so you don't have to put in the password a bunch of times 
 
 # Directory containing the TIF files
-TIF_DIR="/discover/nobackup/cmbreen/aso_data/swe_tifs/colorado"
+TIF_DIR="/discover/nobackup/cmbreen/aso_data/swe_tifs"
 
 # Output directory for downloaded data
-OUTPUT_DIR="/discover/nobackup/cmbreen/aso_data/passive_microwave"
+OUTPUT_DIR="/discover/nobackup/cmbreen/passive_microwave/"
 
 # Filter for specific channels (adjust as needed)
-FILTER="*N3.125km*_37H_*,*N3.125km*_37V_*,*N6.25km*_19H_*,*N6.25km*_19V_*"
+FILTER="*_N3.125km_F18_SSMIS_E_37H_*,*_N3.125km_F18_SSMIS_E_37V_*,*_N6.25km_F18_SSMIS_E_19H_*,*_N6.25km_F18_SSMIS_E_19V_*"
 
 # Function to extract date from filename
 extract_date() {
