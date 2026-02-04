@@ -2,12 +2,14 @@
 
 #!/bin/bash
 ## There is a .netrc file in the discover home directory and in the local home directory so you don't have to put in the password a bunch of times 
+#!/bin/bash
+## There is a .netrc file in the discover home directory and in the local home directory so you don't have to put in the password a bunch of times 
 
-# Directory containing the TIF files
+# Base directory containing the TIF files
 TIF_DIR="/discover/nobackup/cmbreen/aso_data/swe_tifs"
 
-# Output directory for downloaded data
-OUTPUT_DIR="/discover/nobackup/cmbreen/passive_microwave/"
+# Base output directory for downloaded data
+BASE_OUTPUT_DIR="/discover/nobackup/cmbreen/aso_data/passive_microwave"
 
 # Filter for specific channels (adjust as needed)
 FILTER="*_N3.125km_F18_SSMIS_E_37H_*,*_N3.125km_F18_SSMIS_E_37V_*,*_N6.25km_F18_SSMIS_E_19H_*,*_N6.25km_F18_SSMIS_E_19V_*"
@@ -78,9 +80,6 @@ extract_date() {
     return 1
 }
 
-# Create output directory if it doesn't exist
-mkdir -p "$OUTPUT_DIR"
-
 # Counter for processed files
 count=0
 total=$(find "$TIF_DIR" -name "*.tif" ! -name "*.xml" | wc -l)
@@ -89,7 +88,7 @@ echo "========================================================================"
 echo "ASO TIF Passive Microwave Download Script"
 echo "========================================================================"
 echo "TIF directory: $TIF_DIR"
-echo "Output directory: $OUTPUT_DIR"
+echo "Base output directory: $BASE_OUTPUT_DIR"
 echo "Filter: $FILTER"
 echo "Total TIF files found: $total"
 echo "========================================================================"
@@ -106,6 +105,12 @@ for tif_file in "$TIF_DIR"/*.tif; do
     # Get just the filename
     filename=$(basename "$tif_file")
     
+    # Extract filename without extension
+    filename_no_ext="${filename%.tif}"
+    
+    # Create output directory: nsidc_pm_data/[filename_without_tif]
+    output_dir="${BASE_OUTPUT_DIR}/nsidc_pm_data/${filename_no_ext}"
+    
     # Extract date from filename
     date=$(extract_date "$filename")
     
@@ -120,15 +125,16 @@ for tif_file in "$TIF_DIR"/*.tif; do
     
     echo "------------------------------------------------------------------------"
     echo "Processing $count/$total: $filename"
-    echo "Extracted date: $date"
+    echo "ASO date: $date"
+    echo "Output directory: $output_dir"
     echo "------------------------------------------------------------------------"
     
-    # Run the download script
-    python download.py \
+    # Run the download script - only for the exact ASO date
+    python pm_download.py \
         --path "$tif_file" \
         --time_start "$date" \
         --filter "$FILTER" \
-        --output "$OUTPUT_DIR"
+        --output "$output_dir"
     
     # Check if download was successful
     if [ $? -eq 0 ]; then
@@ -143,5 +149,5 @@ done
 echo "========================================================================"
 echo "Processing complete!"
 echo "Processed $count out of $total TIF files"
-echo "Data downloaded to: $OUTPUT_DIR"
+echo "Data downloaded to: $BASE_OUTPUT_DIR/nsidc_pm_data/"
 echo "========================================================================"
