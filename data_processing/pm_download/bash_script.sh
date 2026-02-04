@@ -6,7 +6,7 @@
 ## There is a .netrc file in the discover home directory and in the local home directory so you don't have to put in the password a bunch of times 
 
 # Base directory containing the TIF files
-TIF_DIR="/discover/nobackup/cmbreen/aso_data/swe_tifs"
+TIF_DIR="/discover/nobackup/cmbreen/aso_data/swe_tifs/colorado"
 
 # Base output directory for downloaded data
 BASE_OUTPUT_DIR="/discover/nobackup/cmbreen/aso_data/passive_microwave"
