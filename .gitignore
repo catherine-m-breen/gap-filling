@@ -1,0 +1,10 @@
+cache
+analysis
+data_processing/aso_data
+data_processsing/elevation_download
+data_processing/landcover_download
+data_processing/landsat_download
+data_processing/sentinel_download
+data_processing/snowex_download
+justin_data
+.netrc
