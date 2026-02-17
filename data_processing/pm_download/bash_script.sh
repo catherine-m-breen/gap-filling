@@ -5,11 +5,35 @@
 #!/bin/bash
 ## There is a .netrc file in the discover home directory and in the local home directory so you don't have to put in the password a bunch of times 
 
+# chmod +x bash_script.sh
+# ./bash_script.sh
+
 # Base directory containing the TIF files
-TIF_DIR="/discover/nobackup/cmbreen/aso_data/swe_tifs/colorado"
+TIF_DIR="/discover/nobackup/cmbreen/aso_data/swe_tifs/colorado/"
+
+## The ones that are missing
+## The ones that are missing
+# TIFS=(
+#     "ASO_BlueRiver_Mosaic_2019June24-28_swe_50m.tif"
+#     "ASO_TenMileCk_2019June13-25_swe_50m.tif"
+#     "ASO_WindyGap_2023Apr16_swe_50m.tif"
+#     "ASO_WindyGap_2023May27_swe_50m.tif"
+#     "ASO_WindyGap_2024Apr14_swe_50m.tif"
+#     "ASO_WindyGap_2024Mar21-22_swe_50m.tif"
+#     "ASO_WindyGap_2024May30_swe_50m.tif"
+#     "ASO_WindyGap_2025Apr07_swe_50m.tif"
+#     "ASO_WindyGap_2025Apr29_swe_50m.tif"
+#     "ASO_WindyGap_2025May31_swe_50m.tif"
+#     "ASO_WindyGap_Mosaic_2022Apr18_swe_50m.tif"
+#     "ASO_YampaRiver_2024Apr11_swe_50m.tif"
+#     "ASO_YampaRiver_2024May27-28_swe_50m.tif"
+#     "ASO_YampaRiver_2025Apr11_swe_50m.tif"
+#     "ASO_YampaRiver_2025May22-24_swe_50m.tif"
+# )
+
 
 # Base output directory for downloaded data
-BASE_OUTPUT_DIR="/discover/nobackup/cmbreen/aso_data/passive_microwave"
+BASE_OUTPUT_DIR="/discover/nobackup/cmbreen/gap-filling-data/passive_microwave/nsidc_pm_data"
 
 # Filter for specific channels (adjust as needed)
 FILTER="*_N3.125km_F18_SSMIS_E_37H_*,*_N3.125km_F18_SSMIS_E_37V_*,*_N6.25km_F18_SSMIS_E_19H_*,*_N6.25km_F18_SSMIS_E_19V_*"
@@ -96,6 +120,8 @@ echo ""
 
 # Loop through all .tif files (excluding .xml files)
 for tif_file in "$TIF_DIR"/*.tif; do
+# for filename in "${TIFS[@]}"; do
+#     tif_file="${TIF_DIR}/${filename}"
     # Skip if no files found
     [ -e "$tif_file" ] || continue
     
