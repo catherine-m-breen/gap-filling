@@ -377,7 +377,7 @@ def create_dataloaders(
     
     for split in ['train', 'val', 'test']:
         # Use random crop only for training
-        use_random = random_crop_train if split == 'train' else False
+        use_random = False #random_crop_train if split == 'train' else False
         
         datasets[split] = ASOPatchDataset(
             zarr_dir=zarr_dir,
