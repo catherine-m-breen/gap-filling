@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import os
 import glob
+import IPython
 
 ## each of these is 117 long
 ## they all have already been reprojected and aligned to match the aso data at 50m resolution
@@ -269,9 +270,12 @@ for aso_flight in asopath:
     pm_paths = {}
     for band in required_bands:
         band_matches = [f for f in pm_matches if band in f]
-        if len(band_matches) != 1:
-            raise ValueError(f"Expected exactly 1 {band} file for flight {flight_id}, found {len(band_matches)}")
-        pm_paths[band] = band_matches[0]
+        if len(band_matches) > 1:
+            selected = band_matches[1]  # take the second one
+        else:
+            selected = band_matches[0]
+        
+        pm_paths[band] = selected
 
     tb37H_path = pm_paths["37H"]
     tb37V_path = pm_paths["37V"]
