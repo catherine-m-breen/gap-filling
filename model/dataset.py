@@ -249,11 +249,8 @@ class ASOPatchDataset(Dataset):
             z = zarr.open(str(zarr_path), mode='r')
             
             # Assuming zarr array is (height, width) or (1, height, width)
-            IPython.embed()
-            if len(z.shape) == 3:
-                height, width = z.shape[1], z.shape[2]
-            else:
-                height, width = z.shape[0], z.shape[1]
+            X = z['X']  # <-- FIX: Get the dataset from the group
+            _, height, width = X.shape  # <-- (channels, height, width)
             
             if self.random_crop:
                 # For random cropping, we'll sample on-the-fly
