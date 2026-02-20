@@ -427,7 +427,7 @@ if __name__ == "__main__":
         
         # Get one batch
         #batch_X, batch_Y, batch_metadata
-        atch_X, batch_Y, batch_metadata = next(iter(dataloader))
+        batch_X, batch_Y, batch_metadata = next(iter(dataloader))
         
         print(f"  Features shape: {batch_X.shape}")  # (batch, 11, 256, 256)
         print(f"  Target shape: {batch_Y.shape}")    # (batch, 1, 256, 256)
