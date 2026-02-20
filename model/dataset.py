@@ -1,21 +1,12 @@
-import zarr
-import rasterio
-import numpy as np
-import pandas as pd
-import os
-import glob
-import IPython
 
-## each of these is 117 long
-## they all have already been reprojected and aligned to match the aso data at 50m resolution
-asopath = glob.glob("/discover/nobackup/cmbreen/aso_data_wbasinname/swe_tifs/colorado/**/*.tif")
-snowmappath = glob.glob("/discover/nobackup/cmbreen/gap-filling-data/snowclassmap/processed_50m/*.tif")
-landcoverpath = glob.glob("/discover/nobackup/cmbreen/gap-filling-data/landcover/landcover_50m/*.tif")
-treecoverpath = glob.glob("/discover/nobackup/cmbreen/gap-filling-data/treecanopycover/treecover_50m/*.tif")
-elevation = glob.glob("/discover/nobackup/cmbreen/gap-filling-data/elevation/elevation_50m/*.tif")
-viirs = glob.glob("/discover/nobackup/cmbreen/gap-filling-data/viirs/viirs_50m/*.tif")
-## this one has 117*4 or 468
-passivemicrowavepath = glob.glob("/discover/nobackup/cmbreen/gap-filling-data/passive_microwave/pm_50m/*.tif")
+import torch
+from torch.utils.data import Dataset, DataLoader
+import zarr
+import numpy as np
+from pathlib import Path
+from typing import Dict, List, Tuple
+import random
+
 
 split_basin_dict = {'train': ["Poudre River", "Big and Little Thompson", "Windy Gap",\
                              "St Vrain and Lefthand","Boulder Creek", "Clear Creek", \
@@ -177,149 +168,269 @@ flight_to_basin = {
     'ASO_YampaRiver_2025May22-24_swe_50m.tif': 'Yampa River'
 }
 
-# don't worry about split by year for now, it's stronger if we can predict in new areas, because it suggests
-# model has learned general relationships between sensors and trees and neighboring relationships
-# split_year_dict = {}
 
-output_dir = "/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks"
 
-## helper function ##
-def build_lookup(file_list):
-    lookup = {}
-    for path in file_list:
-        fname = os.path.basename(path)
-        lookup[fname] = path
-    return lookup
-
-def get_single_file(lookup, flight_id, layer_name):
-    """Return a single matching file for a flight; raise errors if none or multiple."""
-    matches = [f for fname, f in lookup.items() if flight_id in fname]
-    if len(matches) == 0:
-        raise ValueError(f"No match found for {layer_name} and flight {flight_id}")
-    if len(matches) > 1:
-        raise ValueError(f"Multiple matches found for {layer_name} and flight {flight_id}: {matches}")
-    return matches[0]
-
-# Build lookups once to avoid repeated glob searches
-snow_lookup = build_lookup(snowmappath)
-land_lookup = build_lookup(landcoverpath)
-tree_lookup = build_lookup(treecoverpath)
-elev_lookup = build_lookup(elevation)
-viirs_lookup = build_lookup(viirs)
-pm_lookup = build_lookup(passivemicrowavepath)
-
-for aso_flight in asopath:
-
-    flight_id = aso_flight.split('/')[-1].split(".")[0]
-    out_path = os.path.join(output_dir, f"{flight_id}.zarr")
+class ASOPatchDataset(Dataset):
+    """
+    PyTorch Dataset for ASO SWE data stored as Zarr files.
+    Extracts patches from zarr arrays and splits by basin.
+    """
     
-    print(f"Processing {flight_id}...")
-    
-    # Open ASO to get shape
-    with rasterio.open(aso_flight) as src:
-        H, W = src.height, src.width
-        crs = src.crs.to_string()
-        transform = src.transform
-        resolution = src.res
-        aso = src.read(1)
-
-    # Create Zarr store
-    store = zarr.open(out_path, mode="w")
-    
-    X = store.create_dataset(
-        "X",
-        shape=(11, H, W),
-        chunks=(11, 256, 256),
-        dtype="float32"
-    )
-    
-    Y = store.create_dataset(
-        "Y",
-        shape=(1, H, W),
-        chunks=(1, 256, 256),
-        dtype="float32"
-    )
-    
-    # --- Match single-layer datasets ---
-    snow_path = get_single_file(snow_lookup, flight_id, "snowmap")
-    land_path = get_single_file(land_lookup, flight_id, "landcover")
-    tree_path = get_single_file(tree_lookup, flight_id, "treecover")
-    elev_path = get_single_file(elev_lookup, flight_id, "elevation")
-    viirs_path = get_single_file(viirs_lookup, flight_id, "viirs")
-
-    # --- Passive microwave matching (4 bands) ---
-    pm_matches = [f for fname, f in pm_lookup.items() if flight_id in fname]
-
-    required_bands = ["37H", "37V", "19H", "19V"]
-    pm_arrays = []
-    
-    if len(pm_matches) == 0:
-        print(f"  Warning: No PM data for {flight_id}, filling with NaN")
-        pm_arrays = [np.full((H, W), np.nan, dtype='float32') for _ in range(4)]
-    else:
-        for band in required_bands:
-            band_matches = [f for f in pm_matches if band in f]
+    def __init__(
+        self,
+        zarr_dir: str,
+        split: str = 'train',
+        patch_size: int = 256,
+        stride: int = 128,
+        split_basin_dict: Dict = None,
+        flight_to_basin: Dict = None,
+        normalize: bool = True,
+        random_crop: bool = False,
+        seed: int = 42
+    ):
+        """
+        Args:
+            zarr_dir: Directory containing .zarr files
+            split: 'train', 'val', or 'test'
+            patch_size: Size of square patches to extract
+            stride: Stride for sliding window (if stride < patch_size, patches overlap)
+            split_basin_dict: Dictionary mapping split names to basin lists
+            flight_to_basin: Dictionary mapping flight filenames to basin names
+            normalize: Whether to normalize SWE values
+            random_crop: If True, randomly sample patches instead of sliding window
+            seed: Random seed
+        """
+        self.zarr_dir = Path(zarr_dir)
+        self.split = split
+        self.patch_size = patch_size
+        self.stride = stride
+        self.normalize = normalize
+        self.random_crop = random_crop
+        
+        self.split_basin_dict = split_basin_dict or split_basin_dict
+        self.flight_to_basin = flight_to_basin or flight_to_basin
+        
+        random.seed(seed)
+        np.random.seed(seed)
+        
+        # Get basins for this split
+        self.basins = self.split_basin_dict[split]
+        
+        # Find all zarr files for this split
+        self.zarr_files = self._get_zarr_files()
+        
+        # Create patch index: list of (file_idx, row, col) tuples
+        self.patches = self._create_patch_index()
+        
+        print(f"{split.upper()} split: {len(self.zarr_files)} files, {len(self.patches)} patches")
+        print(f"Basins: {self.basins}")
+        
+    def _get_zarr_files(self) -> List[Path]:
+        """Get list of zarr files belonging to basins in this split."""
+        zarr_files = []
+        
+        for zarr_path in sorted(self.zarr_dir.glob("*.zarr")):
+            # Convert zarr filename to tif filename for lookup
+            tif_name = zarr_path.stem + '.tif'
             
-            if len(band_matches) == 0:
-                print(f"  Warning: No {band} for {flight_id}, filling with NaN")
-                pm_arrays.append(np.full((H, W), np.nan, dtype='float32'))
-            elif len(band_matches) > 1:
-                print(f"  Using second match for {band}")
-                with rasterio.open(band_matches[1]) as src:
-                    pm_arrays.append(src.read(1))
+            # Check if this flight belongs to a basin in our split
+            if tif_name in self.flight_to_basin:
+                basin = self.flight_to_basin[tif_name]
+                if basin in self.basins:
+                    zarr_files.append(zarr_path)
+                    
+        return zarr_files
+    
+    def _create_patch_index(self) -> List[Tuple[int, int, int]]:
+        """
+        Create index of all patches across all files.
+        Returns list of (file_idx, row_start, col_start) tuples.
+        """
+        patches = []
+        
+        for file_idx, zarr_path in enumerate(self.zarr_files):
+            # Open zarr array to get shape
+            z = zarr.open(str(zarr_path), mode='r')
+            
+            # Assuming zarr array is (height, width) or (1, height, width)
+            if len(z.shape) == 3:
+                height, width = z.shape[1], z.shape[2]
             else:
-                with rasterio.open(band_matches[0]) as src:
-                    pm_arrays.append(src.read(1))
-
-    # Read single-layer datasets
-    predictors = []
-    for path in [snow_path, land_path, tree_path, elev_path]:
-        with rasterio.open(path) as src:
-            predictors.append(src.read(1))
+                height, width = z.shape[0], z.shape[1]
+            
+            if self.random_crop:
+                # For random cropping, we'll sample on-the-fly
+                # Just create one entry per file
+                patches.append((file_idx, -1, -1))
+            else:
+                # Create sliding window patches
+                for row in range(0, height - self.patch_size + 1, self.stride):
+                    for col in range(0, width - self.patch_size + 1, self.stride):
+                        patches.append((file_idx, row, col))
+        
+        return patches
     
-    # Add PM arrays (either real or NaN-filled)
-    predictors.extend(pm_arrays)
+    def __len__(self) -> int:
+        return len(self.patches)
     
-    # Add VIIRS
-    with rasterio.open(viirs_path) as src:
-        predictors.append(src.read(1))
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, Dict]:
+        """
+        Returns:
+            patch: Tensor of shape (C, H, W)
+            metadata: Dict with file info, basin, location, etc.
+        """
+        file_idx, row, col = self.patches[idx]
+        zarr_path = self.zarr_files[file_idx]
+        
+        # Load zarr array
+        z = zarr.open(str(zarr_path), mode='r')
+        
+        # Handle different zarr shapes
+        if len(z.shape) == 3:
+            data = z[:]  # (C, H, W)
+            height, width = data.shape[1], data.shape[2]
+        else:
+            data = z[:]  # (H, W)
+            data = data[np.newaxis, ...]  # Add channel dim -> (1, H, W)
+            height, width = data.shape[1], data.shape[2]
+        
+        # Random crop if enabled
+        if self.random_crop or (row == -1 and col == -1):
+            row = np.random.randint(0, max(1, height - self.patch_size))
+            col = np.random.randint(0, max(1, width - self.patch_size))
+        
+        # Extract patch
+        patch = data[:, row:row+self.patch_size, col:col+self.patch_size]
+        
+        # Handle edge cases where patch is smaller than patch_size
+        if patch.shape[1] < self.patch_size or patch.shape[2] < self.patch_size:
+            padded = np.zeros((patch.shape[0], self.patch_size, self.patch_size), dtype=patch.dtype)
+            padded[:, :patch.shape[1], :patch.shape[2]] = patch
+            patch = padded
+        
+        # Normalize
+        if self.normalize:
+            # Replace NaN with 0, normalize to [0, 1] or standardize
+            patch = np.nan_to_num(patch, nan=0.0)
+            # Simple min-max normalization (adjust as needed)
+            if patch.max() > 0:
+                patch = patch / patch.max()
+        
+        # Convert to tensor
+        patch_tensor = torch.from_numpy(patch).float()
+        
+        # Get metadata
+        tif_name = zarr_path.stem + '.tif'
+        basin = self.flight_to_basin.get(tif_name, 'Unknown')
+        
+        metadata = {
+            'file': zarr_path.name,
+            'basin': basin,
+            'row': row,
+            'col': col,
+            'height': height,
+            'width': width
+        }
+        
+        return patch_tensor, metadata
 
-    predictors = np.stack(predictors).astype("float32")
 
-    # Create forest masks
-    canopy = predictors[2]
-    forested = (canopy > 40).astype("float32")
-    unforested = (canopy <= 40).astype("float32")
-
-    # Stack everything
-    X[:] = np.concatenate([
-        predictors,
-        forested[None, :, :],
-        unforested[None, :, :]
-    ], axis=0)
-    Y[0] = aso.astype("float32")
+def create_dataloaders(
+    zarr_dir: str,
+    batch_size: int = 32,
+    patch_size: int = 256,
+    stride: int = 128,
+    num_workers: int = 4,
+    normalize: bool = True,
+    random_crop_train: bool = True
+) -> Dict[str, DataLoader]:
+    """
+    Create train, val, and test dataloaders.
     
-    # Metadata
-    store.attrs["flight_id"] = flight_id
-    aso_filename = os.path.basename(aso_flight)
-    store.attrs["basin"] = flight_to_basin.get(aso_filename, "unknown")
-    store.attrs["crs"] = crs
-    store.attrs["transform"] = tuple(transform)
-    store.attrs["resolution"] = resolution
-    store.attrs["channel_names"] = [
-        "snow_class",
-        "landcover",
-        "canopy_cover",
-        "elevation",
-        "tb_37H",
-        "tb_37V",
-        "tb_19H",
-        "tb_19V",
-        "ndsi",
-        "forested_mask",
-        "unforested_mask"
-    ]
+    Args:
+        zarr_dir: Directory containing .zarr files
+        batch_size: Batch size
+        patch_size: Size of square patches
+        stride: Stride for sliding window extraction
+        num_workers: Number of workers for dataloading
+        normalize: Whether to normalize data
+        random_crop_train: Whether to use random cropping for training
+        
+    Returns:
+        Dictionary with 'train', 'val', 'test' dataloaders
+    """
     
-    print(f"  ✓ Completed {flight_id}")
+    datasets = {}
+    dataloaders = {}
+    
+    for split in ['train', 'val', 'test']:
+        # Use random crop only for training
+        use_random = random_crop_train if split == 'train' else False
+        
+        datasets[split] = ASOPatchDataset(
+            zarr_dir=zarr_dir,
+            split=split,
+            patch_size=patch_size,
+            stride=stride,
+            normalize=normalize,
+            random_crop=use_random
+        )
+        
+        # Shuffle only for training
+        shuffle = (split == 'train')
+        
+        dataloaders[split] = DataLoader(
+            datasets[split],
+            batch_size=batch_size,
+            shuffle=shuffle,
+            num_workers=num_workers,
+            pin_memory=True,
+            drop_last=(split == 'train')  # Drop last incomplete batch for training
+        )
+    
+    return dataloaders
 
-print("\nAll done!")
+
+# Example usage
+if __name__ == "__main__":
+    
+    zarr_dir = "/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks"
+    
+    # Create dataloaders
+    dataloaders = create_dataloaders(
+        zarr_dir=zarr_dir,
+        batch_size=16,
+        patch_size=256,
+        stride=128,
+        num_workers=4,
+        normalize=True,
+        random_crop_train=True
+    )
+    
+    # Test loading
+    print("\n=== Testing Dataloaders ===")
+    for split in ['train', 'val', 'test']:
+        dataloader = dataloaders[split]
+        print(f"\n{split.upper()}:")
+        
+        # Get one batch
+        batch_patches, batch_metadata = next(iter(dataloader))
+        
+        print(f"  Batch shape: {batch_patches.shape}")
+        print(f"  Data range: [{batch_patches.min():.3f}, {batch_patches.max():.3f}]")
+        print(f"  Sample basins: {[m for m in batch_metadata['basin'][:3]]}")
+        print(f"  Sample files: {[m for m in batch_metadata['file'][:3]]}")
+        
+        # Count total patches
+        total = 0
+        for _ in dataloader:
+            total += batch_patches.size(0)
+        print(f"  Total patches: {total}")
+
+# Simple usage
+dataloaders = create_dataloaders(
+    zarr_dir="/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks",
+    batch_size=32,
+    patch_size=256,
+    stride=128  # 50% overlap
+)
