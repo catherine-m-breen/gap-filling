@@ -273,8 +273,10 @@ for aso_flight in asopath:
         if len(band_matches) > 1:
             selected = band_matches[1]  # take the second one
         else:
-            IPython.embed()
-            selected = band_matches[0]
+            try:
+                selected = band_matches[0]
+            except:
+                IPython.embed()
         
         pm_paths[band] = selected
 

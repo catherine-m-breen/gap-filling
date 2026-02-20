@@ -5,34 +5,38 @@
 # ./bash_script.sh
 
 # Base directory containing the TIF files
-#TIF_DIR="/discover/nobackup/cmbreen/aso_data/swe_tifs/colorado"
-TIF_DIR="/Volumes/MyBook/aso_data/swe_tifs/colorado/**/"
+TIF_DIR="/Volumes/MyBook/aso_data/swe_tifs/colorado"
 
 ## The ones that are missing
 TIFS=(
     "ASO_BlueRiver_Mosaic_2019June24-28_swe_50m.tif"
     "ASO_TenMileCk_2019June13-25_swe_50m.tif"
-    "ASO_WindyGap_2023Apr16_swe_50m.tif"
-    "ASO_WindyGap_2023May27_swe_50m.tif"
-    "ASO_WindyGap_2024Apr14_swe_50m.tif"
-    "ASO_WindyGap_2024Mar21-22_swe_50m.tif"
-    "ASO_WindyGap_2024May30_swe_50m.tif"
-    "ASO_WindyGap_2025Apr07_swe_50m.tif"
-    "ASO_WindyGap_2025Apr29_swe_50m.tif"
-    "ASO_WindyGap_2025May31_swe_50m.tif"
-    "ASO_WindyGap_Mosaic_2022Apr18_swe_50m.tif"
-    "ASO_YampaRiver_2024Apr11_swe_50m.tif"
-    "ASO_YampaRiver_2024May27-28_swe_50m.tif"
-    "ASO_YampaRiver_2025Apr11_swe_50m.tif"
-    "ASO_YampaRiver_2025May22-24_swe_50m.tif"
 )
 
+    # "ASO_WindyGap_2023Apr16_swe_50m.tif"
+    # "ASO_WindyGap_2023May27_swe_50m.tif"
+    # "ASO_WindyGap_2024Apr14_swe_50m.tif"
+    # "ASO_WindyGap_2024Mar21-22_swe_50m.tif"
+    # "ASO_WindyGap_2024May30_swe_50m.tif"
+    # "ASO_WindyGap_2025Apr07_swe_50m.tif"
+    # "ASO_WindyGap_2025Apr29_swe_50m.tif"
+    # "ASO_WindyGap_2025May31_swe_50m.tif"
+    # "ASO_WindyGap_Mosaic_2022Apr18_swe_50m.tif"
+    # "ASO_YampaRiver_2024Apr11_swe_50m.tif"
+    # "ASO_YampaRiver_2024May27-28_swe_50m.tif"
+    # "ASO_YampaRiver_2025Apr11_swe_50m.tif"
+    # "ASO_YampaRiver_2025May22-24_swe_50m.tif"
+
 # Base output directory for downloaded data
-BASE_OUTPUT_DIR="/discover/nobackup/cmbreen/gap-filling-data/passive_microwave/nsidc_pm_data"
+#BASE_OUTPUT_DIR="/discover/nobackup/cmbreen/gap-filling-data/passive_microwave/nsidc_pm_data"
+BASE_OUTPUT_DIR="/Volumes/MyBook/passive_microwave"
+
 
 # Filter for specific channels (adjust as needed)
 FILTER="*_N3.125km_F18_SSMIS_E_37H_*,*_N3.125km_F18_SSMIS_E_37V_*,*_N6.25km_F18_SSMIS_E_19H_*,*_N6.25km_F18_SSMIS_E_19V_*"
 
+# Function to extract date from filename
+# Function to extract date from filename
 # Function to extract date from filename
 extract_date() {
     local filename="$1"
@@ -44,52 +48,55 @@ extract_date() {
         return 0
     fi
     
-    # Try pattern 2: YYYYMmmDD (e.g., ASO_BlueRiver_2023Apr16_swe_50m.tif)
-    if [[ $filename =~ _([0-9]{4})(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)([0-9]{2})_ ]]; then
+    # Try pattern 2: YYYYMonthDD (with 3-letter OR full month name)
+    # e.g., ASO_BlueRiver_2023Apr16_swe_50m.tif OR ASO_BlueRiver_2019June24_swe_50m.tif
+    if [[ $filename =~ ([0-9]{4})(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)([0-9]{2})_swe ]]; then
         local year="${BASH_REMATCH[1]}"
         local month="${BASH_REMATCH[2]}"
         local day="${BASH_REMATCH[3]}"
         
-        # Convert month abbreviation to number
+        # Convert month name/abbreviation to number
         case $month in
-            Jan) month="01";;
-            Feb) month="02";;
-            Mar) month="03";;
-            Apr) month="04";;
+            Jan|January) month="01";;
+            Feb|February) month="02";;
+            Mar|March) month="03";;
+            Apr|April) month="04";;
             May) month="05";;
-            Jun) month="06";;
-            Jul) month="07";;
-            Aug) month="08";;
-            Sep) month="09";;
-            Oct) month="10";;
-            Nov) month="11";;
-            Dec) month="12";;
+            Jun|June) month="06";;
+            Jul|July) month="07";;
+            Aug|August) month="08";;
+            Sep|September) month="09";;
+            Oct|October) month="10";;
+            Nov|November) month="11";;
+            Dec|December) month="12";;
         esac
         
         echo "${year}-${month}-${day}"
         return 0
     fi
     
-    # Try pattern 3: YYYYMmmDD-DD (date range, e.g., ASO_BlueRiver_2019June24-28_swe_50m.tif)
-    if [[ $filename =~ _([0-9]{4})(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)([0-9]{2})-([0-9]{2})_ ]]; then
+    # Try pattern 3: YYYYMonthDD-DD (date range with 3-letter OR full month name)
+    # e.g., ASO_BlueRiver_2019June24-28_swe_50m.tif
+    if [[ $filename =~ ([0-9]{4})(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)([0-9]{2})-([0-9]{2})_swe ]]; then
         local year="${BASH_REMATCH[1]}"
         local month="${BASH_REMATCH[2]}"
         local day="${BASH_REMATCH[3]}"
+        # Note: day_end="${BASH_REMATCH[4]}" if you need the end date
         
-        # Convert month abbreviation to number
+        # Convert month name/abbreviation to number
         case $month in
-            Jan) month="01";;
-            Feb) month="02";;
-            Mar) month="03";;
-            Apr) month="04";;
+            Jan|January) month="01";;
+            Feb|February) month="02";;
+            Mar|March) month="03";;
+            Apr|April) month="04";;
             May) month="05";;
-            Jun) month="06";;
-            Jul) month="07";;
-            Aug) month="08";;
-            Sep) month="09";;
-            Oct) month="10";;
-            Nov) month="11";;
-            Dec) month="12";;
+            Jun|June) month="06";;
+            Jul|July) month="07";;
+            Aug|August) month="08";;
+            Sep|September) month="09";;
+            Oct|October) month="10";;
+            Nov|November) month="11";;
+            Dec|December) month="12";;
         esac
         
         echo "${year}-${month}-${day}"
@@ -106,7 +113,7 @@ total=${#TIFS[@]}
 echo "========================================================================"
 echo "ASO TIF Passive Microwave Download Script (Missing Files Only)"
 echo "========================================================================"
-echo "TIF directory: $TIF_DIR"
+echo "TIF directory: $TIF_DIR (searching recursively)"
 echo "Base output directory: $BASE_OUTPUT_DIR"
 echo "Filter: $FILTER"
 echo "Total TIF files to process: $total"
@@ -115,14 +122,18 @@ echo ""
 
 # Loop through the specific missing TIF files
 for filename in "${TIFS[@]}"; do
-    tif_file="${TIF_DIR}/${filename}"
+    # Search recursively for the file
+    echo "Searching for: $filename"
+    tif_file=$(find "$TIF_DIR" -name "$filename" -type f 2>/dev/null | head -n 1)
     
-    # Check if file exists
-    if [ ! -e "$tif_file" ]; then
-        echo "WARNING: File not found: $tif_file - SKIPPING"
+    # Check if file was found
+    if [ -z "$tif_file" ]; then
+        echo "WARNING: File not found: $filename - SKIPPING"
         echo ""
         continue
     fi
+    
+    echo "Found at: $tif_file"
     
     # Extract filename without extension
     filename_no_ext="${filename%.tif}"

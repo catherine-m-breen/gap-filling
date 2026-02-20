@@ -1,10 +1,16 @@
 cache
 analysis
 data_processing/aso_data
-data_processsing/elevation_download
+data_processing/elevation_download
 data_processing/landcover_download
 data_processing/landsat_download
 data_processing/sentinel_download
 data_processing/snowex_download
+data_processing/viirs_download
+data_processing/treecover_download
+data_processing/snowclass_download
+data_processing/pm_download/nsidc_pm_data
+
 justin_data
 .netrc
+nsidc_pm_data

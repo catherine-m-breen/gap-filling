@@ -5,30 +5,32 @@
 # ./bash_script.sh
 
 # Base directory containing the TIF files
-#TIF_DIR="/discover/nobackup/cmbreen/aso_data/swe_tifs/colorado"
-TIF_DIR="/Volumes/MyBook/aso_data/swe_tifs/colorado/**/"
+TIF_DIR="/Volumes/MyBook/aso_data/swe_tifs/colorado"
 
 ## The ones that are missing
 TIFS=(
     "ASO_BlueRiver_Mosaic_2019June24-28_swe_50m.tif"
     "ASO_TenMileCk_2019June13-25_swe_50m.tif"
-    "ASO_WindyGap_2023Apr16_swe_50m.tif"
-    "ASO_WindyGap_2023May27_swe_50m.tif"
-    "ASO_WindyGap_2024Apr14_swe_50m.tif"
-    "ASO_WindyGap_2024Mar21-22_swe_50m.tif"
-    "ASO_WindyGap_2024May30_swe_50m.tif"
-    "ASO_WindyGap_2025Apr07_swe_50m.tif"
-    "ASO_WindyGap_2025Apr29_swe_50m.tif"
-    "ASO_WindyGap_2025May31_swe_50m.tif"
-    "ASO_WindyGap_Mosaic_2022Apr18_swe_50m.tif"
-    "ASO_YampaRiver_2024Apr11_swe_50m.tif"
-    "ASO_YampaRiver_2024May27-28_swe_50m.tif"
-    "ASO_YampaRiver_2025Apr11_swe_50m.tif"
-    "ASO_YampaRiver_2025May22-24_swe_50m.tif"
 )
 
+    # "ASO_WindyGap_2023Apr16_swe_50m.tif"
+    # "ASO_WindyGap_2023May27_swe_50m.tif"
+    # "ASO_WindyGap_2024Apr14_swe_50m.tif"
+    # "ASO_WindyGap_2024Mar21-22_swe_50m.tif"
+    # "ASO_WindyGap_2024May30_swe_50m.tif"
+    # "ASO_WindyGap_2025Apr07_swe_50m.tif"
+    # "ASO_WindyGap_2025Apr29_swe_50m.tif"
+    # "ASO_WindyGap_2025May31_swe_50m.tif"
+    # "ASO_WindyGap_Mosaic_2022Apr18_swe_50m.tif"
+    # "ASO_YampaRiver_2024Apr11_swe_50m.tif"
+    # "ASO_YampaRiver_2024May27-28_swe_50m.tif"
+    # "ASO_YampaRiver_2025Apr11_swe_50m.tif"
+    # "ASO_YampaRiver_2025May22-24_swe_50m.tif"
+
 # Base output directory for downloaded data
-BASE_OUTPUT_DIR="/discover/nobackup/cmbreen/gap-filling-data/passive_microwave/nsidc_pm_data"
+#BASE_OUTPUT_DIR="/discover/nobackup/cmbreen/gap-filling-data/passive_microwave/nsidc_pm_data"
+BASE_OUTPUT_DIR="/Volumes/MyBook/passive_microwave"
+
 
 # Filter for specific channels (adjust as needed)
 FILTER="*_N3.125km_F18_SSMIS_E_37H_*,*_N3.125km_F18_SSMIS_E_37V_*,*_N6.25km_F18_SSMIS_E_19H_*,*_N6.25km_F18_SSMIS_E_19V_*"
@@ -106,7 +108,7 @@ total=${#TIFS[@]}
 echo "========================================================================"
 echo "ASO TIF Passive Microwave Download Script (Missing Files Only)"
 echo "========================================================================"
-echo "TIF directory: $TIF_DIR"
+echo "TIF directory: $TIF_DIR (searching recursively)"
 echo "Base output directory: $BASE_OUTPUT_DIR"
 echo "Filter: $FILTER"
 echo "Total TIF files to process: $total"
@@ -115,14 +117,18 @@ echo ""
 
 # Loop through the specific missing TIF files
 for filename in "${TIFS[@]}"; do
-    tif_file="${TIF_DIR}/${filename}"
+    # Search recursively for the file
+    echo "Searching for: $filename"
+    tif_file=$(find "$TIF_DIR" -name "$filename" -type f 2>/dev/null | head -n 1)
     
-    # Check if file exists
-    if [ ! -e "$tif_file" ]; then
-        echo "WARNING: File not found: $tif_file - SKIPPING"
+    # Check if file was found
+    if [ -z "$tif_file" ]; then
+        echo "WARNING: File not found: $filename - SKIPPING"
         echo ""
         continue
     fi
+    
+    echo "Found at: $tif_file"
     
     # Extract filename without extension
     filename_no_ext="${filename%.tif}"
