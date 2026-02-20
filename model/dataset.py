@@ -251,7 +251,7 @@ class ASOPatchDataset(Dataset):
             # Assuming zarr array is (height, width) or (1, height, width)
             X = z['X']  # <-- FIX: Get the dataset from the group
             _, height, width = X.shape  # <-- (channels, height, width)
-            
+
             if self.random_crop:
                 # For random cropping, we'll sample on-the-fly
                 # Just create one entry per file
@@ -279,39 +279,57 @@ class ASOPatchDataset(Dataset):
         # Load zarr array
         z = zarr.open(str(zarr_path), mode='r')
         
-        # Handle different zarr shapes
-        if len(z.shape) == 3:
-            data = z[:]  # (C, H, W)
-            height, width = data.shape[1], data.shape[2]
-        else:
-            data = z[:]  # (H, W)
-            data = data[np.newaxis, ...]  # Add channel dim -> (1, H, W)
-            height, width = data.shape[1], data.shape[2]
+        # Get X (features) and Y (target SWE) datasets
+        X = z['X']  # (11, H, W)
+        Y = z['Y']  # (1, H, W)
         
-        # Random crop if enabled
+        _, height, width = X.shape
+        
+            
+            # Random crop if enabled
         if self.random_crop or (row == -1 and col == -1):
             row = np.random.randint(0, max(1, height - self.patch_size))
             col = np.random.randint(0, max(1, width - self.patch_size))
         
-        # Extract patch
-        patch = data[:, row:row+self.patch_size, col:col+self.patch_size]
+        # Extract patches
+        X_patch = X[:, row:row+self.patch_size, col:col+self.patch_size]
+        Y_patch = Y[:, row:row+self.patch_size, col:col+self.patch_size]
+        
+        # Convert to numpy
+        X_patch = np.array(X_patch)
+        Y_patch = np.array(Y_patch)
         
         # Handle edge cases where patch is smaller than patch_size
-        if patch.shape[1] < self.patch_size or patch.shape[2] < self.patch_size:
-            padded = np.zeros((patch.shape[0], self.patch_size, self.patch_size), dtype=patch.dtype)
-            padded[:, :patch.shape[1], :patch.shape[2]] = patch
-            patch = padded
+        if X_patch.shape[1] < self.patch_size or X_patch.shape[2] < self.patch_size:
+            X_padded = np.zeros((X_patch.shape[0], self.patch_size, self.patch_size), dtype=np.float32)
+            Y_padded = np.zeros((Y_patch.shape[0], self.patch_size, self.patch_size), dtype=np.float32)
+            
+            X_padded[:, :X_patch.shape[1], :X_patch.shape[2]] = X_patch
+            Y_padded[:, :Y_patch.shape[1], :Y_patch.shape[2]] = Y_patch
+            
+            X_patch = X_padded
+            Y_patch = Y_padded
+        
+        # Handle NaN values
+        X_patch = np.nan_to_num(X_patch, nan=0.0)
+        Y_patch = np.nan_to_num(Y_patch, nan=0.0)
         
         # Normalize
         if self.normalize:
-            # Replace NaN with 0, normalize to [0, 1] or standardize
-            patch = np.nan_to_num(patch, nan=0.0)
-            # Simple min-max normalization (adjust as needed)
-            if patch.max() > 0:
-                patch = patch / patch.max()
+            # Per-channel normalization for features
+            for c in range(X_patch.shape[0]):
+                channel_max = X_patch[c].max()
+                if channel_max > 0:
+                    X_patch[c] = X_patch[c] / channel_max
+            
+            # Normalize target
+            y_max = Y_patch.max()
+            if y_max > 0:
+                Y_patch = Y_patch / y_max
         
-        # Convert to tensor
-        patch_tensor = torch.from_numpy(patch).float()
+        # Convert to tensors
+        X_tensor = torch.from_numpy(X_patch).float()
+        Y_tensor = torch.from_numpy(Y_patch).float()
         
         # Get metadata
         tif_name = zarr_path.stem + '.tif'
@@ -326,7 +344,7 @@ class ASOPatchDataset(Dataset):
             'width': width
         }
         
-        return patch_tensor, metadata
+        return X_tensor, Y_tensor, metadata
 
 
 def create_dataloaders(
@@ -408,6 +426,7 @@ if __name__ == "__main__":
         print(f"\n{split.upper()}:")
         
         # Get one batch
+        #batch_X, batch_Y, batch_metadata
         batch_patches, batch_metadata = next(iter(dataloader))
         
         print(f"  Batch shape: {batch_patches.shape}")
