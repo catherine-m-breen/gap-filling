@@ -427,17 +427,19 @@ if __name__ == "__main__":
         
         # Get one batch
         #batch_X, batch_Y, batch_metadata
-        batch_patches, batch_metadata = next(iter(dataloader))
+        atch_X, batch_Y, batch_metadata = next(iter(dataloader))
         
-        print(f"  Batch shape: {batch_patches.shape}")
-        print(f"  Data range: [{batch_patches.min():.3f}, {batch_patches.max():.3f}]")
-        print(f"  Sample basins: {[m for m in batch_metadata['basin'][:3]]}")
-        print(f"  Sample files: {[m for m in batch_metadata['file'][:3]]}")
+        print(f"  Features shape: {batch_X.shape}")  # (batch, 11, 256, 256)
+        print(f"  Target shape: {batch_Y.shape}")    # (batch, 1, 256, 256)
+        print(f"  X range: [{batch_X.min():.3f}, {batch_X.max():.3f}]")
+        print(f"  Y range: [{batch_Y.min():.3f}, {batch_Y.max():.3f}]")
+        print(f"  Sample basins: {batch_metadata['basin'][:3]}")
+        print(f"  Sample files: {batch_metadata['file'][:3]}")
         
         # Count total patches
         total = 0
-        for _ in dataloader:
-            total += batch_patches.size(0)
+        for batch_X, batch_Y, _ in dataloader:  # UNPACK 3 VALUES
+            total += batch_X.size(0)
         print(f"  Total patches: {total}")
 
 # Simple usage
