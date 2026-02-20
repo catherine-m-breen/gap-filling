@@ -181,9 +181,7 @@ flight_to_basin = {
 # model has learned general relationships between sensors and trees and neighboring relationships
 # split_year_dict = {}
 
-
 output_dir = "/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks"
-
 
 ## helper function ##
 def build_lookup(file_list):
@@ -210,11 +208,12 @@ elev_lookup = build_lookup(elevation)
 viirs_lookup = build_lookup(viirs)
 pm_lookup = build_lookup(passivemicrowavepath)
 
-
 for aso_flight in asopath:
 
     flight_id = aso_flight.split('/')[-1].split(".")[0]
     out_path = os.path.join(output_dir, f"{flight_id}.zarr")
+    
+    print(f"Processing {flight_id}...")
     
     # Open ASO to get shape
     with rasterio.open(aso_flight) as src:
@@ -222,7 +221,6 @@ for aso_flight in asopath:
         crs = src.crs.to_string()
         transform = src.transform
         resolution = src.res
-        
         aso = src.read(1)
 
     # Create Zarr store
@@ -242,20 +240,6 @@ for aso_flight in asopath:
         dtype="float32"
     )
     
-    # Read and stack predictors
-    predictors = []
-    
-    def find_single_match(file_list, flight_id, layer_name):
-        matches = [f for f in file_list if flight_id in os.path.basename(f)]
-        
-        if len(matches) == 0:
-            raise ValueError(f"No match found for {layer_name} and {flight_id}")
-        if len(matches) > 1:
-            raise ValueError(f"Multiple matches found for {layer_name} and {flight_id}: {matches}")
-        
-        return matches[0]
-
-   
     # --- Match single-layer datasets ---
     snow_path = get_single_file(snow_lookup, flight_id, "snowmap")
     land_path = get_single_file(land_lookup, flight_id, "landcover")
@@ -267,46 +251,56 @@ for aso_flight in asopath:
     pm_matches = [f for fname, f in pm_lookup.items() if flight_id in fname]
 
     required_bands = ["37H", "37V", "19H", "19V"]
-    pm_paths = {}
-    for band in required_bands:
-        band_matches = [f for f in pm_matches if band in f]
-        if len(band_matches) > 1:
-            selected = band_matches[1]  # take the second one
-        else:
-            try:
-                selected = band_matches[0]
-            except:
-                IPython.embed()
-        
-        pm_paths[band] = selected
-
-    tb37H_path = pm_paths["37H"]
-    tb37V_path = pm_paths["37V"]
-    tb19H_path = pm_paths["19H"]
-    tb19V_path = pm_paths["19V"]
-
-    layer_paths = [
-        snow_path,
-        land_path,
-        tree_path,
-        elev_path,
-        tb37H_path,
-        tb37V_path,
-        tb19H_path,
-        tb19V_path,
-        viirs_path,
-    ]
-        
-    # for path in layer_paths:
-    #     with rasterio.open(path) as src:
-    #         predictors.append(src.read(1))
+    pm_arrays = []
     
-    # X[:] = np.stack(predictors).astype("float32")
-    # Y[0] = aso.astype("float32")
+    if len(pm_matches) == 0:
+        print(f"  Warning: No PM data for {flight_id}, filling with NaN")
+        pm_arrays = [np.full((H, W), np.nan, dtype='float32') for _ in range(4)]
+    else:
+        for band in required_bands:
+            band_matches = [f for f in pm_matches if band in f]
+            
+            if len(band_matches) == 0:
+                print(f"  Warning: No {band} for {flight_id}, filling with NaN")
+                pm_arrays.append(np.full((H, W), np.nan, dtype='float32'))
+            elif len(band_matches) > 1:
+                print(f"  Using second match for {band}")
+                with rasterio.open(band_matches[1]) as src:
+                    pm_arrays.append(src.read(1))
+            else:
+                with rasterio.open(band_matches[0]) as src:
+                    pm_arrays.append(src.read(1))
+
+    # Read single-layer datasets
+    predictors = []
+    for path in [snow_path, land_path, tree_path, elev_path]:
+        with rasterio.open(path) as src:
+            predictors.append(src.read(1))
+    
+    # Add PM arrays (either real or NaN-filled)
+    predictors.extend(pm_arrays)
+    
+    # Add VIIRS
+    with rasterio.open(viirs_path) as src:
+        predictors.append(src.read(1))
+
+    predictors = np.stack(predictors).astype("float32")
+
+    # Create forest masks
+    canopy = predictors[2]
+    forested = (canopy > 40).astype("float32")
+    unforested = (canopy <= 40).astype("float32")
+
+    # Stack everything
+    X[:] = np.concatenate([
+        predictors,
+        forested[None, :, :],
+        unforested[None, :, :]
+    ], axis=0)
+    Y[0] = aso.astype("float32")
     
     # Metadata
     store.attrs["flight_id"] = flight_id
-    #store.attrs["year"] = int(row["year"])
     aso_filename = os.path.basename(aso_flight)
     store.attrs["basin"] = flight_to_basin.get(aso_filename, "unknown")
     store.attrs["crs"] = crs
@@ -325,23 +319,7 @@ for aso_flight in asopath:
         "forested_mask",
         "unforested_mask"
     ]
+    
+    print(f"  ✓ Completed {flight_id}")
 
-    predictors = []
-
-    for path in layer_paths:
-        with rasterio.open(path) as src:
-            predictors.append(src.read(1))
-
-    predictors = np.stack(predictors).astype("float32")
-
-    canopy = predictors[2]
-
-    forested = (canopy > 40).astype("float32")
-    unforested = (canopy <= 40).astype("float32")
-
-    X[:] = np.concatenate([
-        predictors,
-        forested[None, :, :],
-        unforested[None, :, :]
-    ], axis=0)
-    Y[0] = aso.astype("float32")
+print("\nAll done!")
