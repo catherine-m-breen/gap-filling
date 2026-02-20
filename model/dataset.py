@@ -1,4 +1,4 @@
-
+## conda activate gapfill2
 import torch
 from torch.utils.data import Dataset, DataLoader
 import zarr
@@ -6,6 +6,7 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, List, Tuple
 import random
+import IPython
 
 
 split_basin_dict = {'train': ["Poudre River", "Big and Little Thompson", "Windy Gap",\
@@ -248,6 +249,7 @@ class ASOPatchDataset(Dataset):
             z = zarr.open(str(zarr_path), mode='r')
             
             # Assuming zarr array is (height, width) or (1, height, width)
+            IPython.embed()
             if len(z.shape) == 3:
                 height, width = z.shape[1], z.shape[2]
             else:
