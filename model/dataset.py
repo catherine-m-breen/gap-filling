@@ -182,8 +182,6 @@ class ASOPatchDataset(Dataset):
         split: str = 'train',
         patch_size: int = 256,
         stride: int = 128,
-        split_basin_dict: Dict = None,
-        flight_to_basin: Dict = None,
         normalize: bool = True,
         random_crop: bool = False,
         seed: int = 42
@@ -207,14 +205,11 @@ class ASOPatchDataset(Dataset):
         self.normalize = normalize
         self.random_crop = random_crop
         
-        self.split_basin_dict = split_basin_dict or split_basin_dict
-        self.flight_to_basin = flight_to_basin or flight_to_basin
-        
         random.seed(seed)
         np.random.seed(seed)
         
         # Get basins for this split
-        self.basins = self.split_basin_dict[split]
+        self.basins = split_basin_dict[split]
         
         # Find all zarr files for this split
         self.zarr_files = self._get_zarr_files()
@@ -234,8 +229,8 @@ class ASOPatchDataset(Dataset):
             tif_name = zarr_path.stem + '.tif'
             
             # Check if this flight belongs to a basin in our split
-            if tif_name in self.flight_to_basin:
-                basin = self.flight_to_basin[tif_name]
+            if tif_name in flight_to_basin:
+                basin = flight_to_basin[tif_name]
                 if basin in self.basins:
                     zarr_files.append(zarr_path)
                     
@@ -321,7 +316,7 @@ class ASOPatchDataset(Dataset):
         
         # Get metadata
         tif_name = zarr_path.stem + '.tif'
-        basin = self.flight_to_basin.get(tif_name, 'Unknown')
+        basin = flight_to_basin.get(tif_name, 'Unknown')
         
         metadata = {
             'file': zarr_path.name,

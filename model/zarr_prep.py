@@ -1,3 +1,5 @@
+# run from conda activate gapfill2
+
 import zarr
 import rasterio
 import numpy as np
