@@ -11,8 +11,8 @@ import IPython
 
 split_basin_dict = {'train': ["Poudre River", "Big and Little Thompson", "Windy Gap",\
                              "St Vrain and Lefthand","Boulder Creek", "Clear Creek", \
-                             "Blue River", "Upper South Platte"], \
-                   'val': ["Yampa River", "Roaring Fork", "North Fork Gunnison", "East River", "Taylor"], \
+                             "Blue River", "Upper South Platte", "Yampa River"], \
+                   'val': ["Roaring Fork", "North Fork Gunnison", "East River", "Taylor"], \
                    'test': ["Dolores","Animas","Upper Rio Grande","Conejos", "Uncompahgre River"]
 }
 flight_to_basin = {
