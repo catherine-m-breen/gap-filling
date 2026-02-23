@@ -1,3 +1,4 @@
+## module load anaconda/py3.11.7
 ## conda activate gapfill2
 import torch
 from torch.utils.data import Dataset, DataLoader
