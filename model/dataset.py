@@ -18,9 +18,7 @@ split_basin_dict = {'train': ["Poudre River", "Big and Little Thompson", "Windy 
 flight_to_basin = {
     # Animas
     'ASO_Animas_Mosaic_2021Apr19_swe_50m.tif': 'Animas',
-    'ASO_Animas_Mosaic_2021Apr19_swe_50m.tif.aux.xml': 'Animas',
     'ASO_Animas_Mosaic_2021May15-16_swe_50m.tif': 'Animas',
-    'ASO_Animas_Mosaic_2021May15-16_swe_50m.tif.aux.xml': 'Animas',
     
     # Big and Little Thompson
     'ASO_BigThompson_2024Apr21_swe_50m.tif': 'Big and Little Thompson',
@@ -30,7 +28,6 @@ flight_to_basin = {
     # Blue River
     'ASO_50M_SWE_USCOBR_20190419.tif': 'Blue River',
     'ASO_50M_SWE_USCOBR_20190624.tif': 'Blue River',
-    'ASO_50M_SWE_USCOBR_20190624.tif.xml': 'Blue River',
     'ASO_Blue_Mosaic_2022Apr19_swe_50m.tif': 'Blue River',
     'ASO_Blue_Mosaic_2022May26_swe_50m.tif': 'Blue River',
     'ASO_BlueRiver_2023Apr16_swe_50m.tif': 'Blue River',
@@ -78,7 +75,6 @@ flight_to_basin = {
     'ASO_Dolores_2025Apr06_swe_50m.tif': 'Dolores',
     'ASO_Dolores_2025Apr27_swe_50m.tif': 'Dolores',
     'ASO_Dolores_Mosaic_2021Apr20-21_swe_50m.tif': 'Dolores',
-    'ASO_Dolores_Mosaic_2021Apr20-21_swe_50m.tif.aux.xml': 'Dolores',
     'ASO_Dolores_Mosaic_2021May14_swe_50m.tif': 'Dolores',
     'ASO_Dolores_Mosaic_2022Apr15_swe_50m.tif': 'Dolores',
     'ASO_Dolores_Mosaic_2022May10_swe_50m.tif': 'Dolores',
@@ -94,7 +90,11 @@ flight_to_basin = {
     'ASO_EastRiver_2023May23_swe_50m.tif': 'East River',
     'ASO_EastRiver_2024Apr03_swe_50m.tif': 'East River',
     'ASO_EastRiver_2024May20_swe_50m.tif': 'East River',
-    
+    'ASO_EastRiver_Mosaic_2022May18_swe_50m.tif' : 'East River',
+    'ASO_EastRiver_2025Apr07_swe_50m.tif' : 'East River',
+    'ASO_EastRiver_2025May20_swe_50m.tif' : 'East River',
+    'ASO_Gunnison_EastRiver_2022Apr21_swe_50m.tif' : 'East River',
+
     # North Fork Gunnison
     'ASO_GunnisonNorth_2025Apr27_swe_50m.tif': 'North Fork Gunnison',
     'ASO_GunnisonNorth_2025Mar27_swe_50m.tif': 'North Fork Gunnison',
@@ -129,17 +129,19 @@ flight_to_basin = {
     'ASO_Gunnison_Taylor_2022May25_swe_50m.tif': 'Taylor',
     'ASO_Taylor_2023Apr01_swe_50m.tif': 'Taylor',
     'ASO_Taylor_2024Apr04_swe_50m.tif': 'Taylor',
+    'ASO_Taylor_2024May20_swe_50m.tif': 'Taylor',
+    'ASO_Taylor_2025Apr07_swe_50m.tif': 'Taylor',
+    'ASO_Taylor_2025May20-21_swe_50m.tif': 'Taylor',
+    'ASO_TaylorAndLottis_2023May23_swe_50m.tif': 'Taylor',
     
     # Uncompahgre River
     'ASO_50M_SWE_USCOUB_20140320.tif': 'Uncompahgre River',
     
     # Upper Rio Grande
     'ASO_50M_SWE_USCORG_20150407.tif': 'Upper Rio Grande',
-    'ASO_50M_SWE_USCORG_20150407.tif.xml': 'Upper Rio Grande',
     'ASO_50M_SWE_USCORG_20150602.tif': 'Upper Rio Grande',
     'ASO_50M_SWE_USCORG_20160403.tif': 'Upper Rio Grande',
     'ASO_RioGrande_2025Mar23-24_swe_50m.tif': 'Upper Rio Grande',
-    'ASO_RioGrande_2025Mar23-24_swe_50m.tif.aux.xml': 'Upper Rio Grande',
     'ASO_RioGrande_2025May13-15_swe_50m.tif': 'Upper Rio Grande',
     
     # Upper South Platte
