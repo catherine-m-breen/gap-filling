@@ -1,5 +1,33 @@
 ## module load anaconda/py3.11.7
 ## conda activate gapfill2
+
+#######
+
+'''
+Need to deal with the -9999: 
+
+# Handle NaN values and -9999
+# Create validity mask BEFORE replacing
+X_valid_mask = ~(np.isnan(X_patch) | (X_patch == -9999))
+Y_valid_mask = ~(np.isnan(Y_patch) | (Y_patch == -9999))
+
+# Replace with 0
+X_patch = np.nan_to_num(X_patch, nan=0.0)
+Y_patch = np.nan_to_num(Y_patch, nan=0.0)
+X_patch[X_patch == -9999] = 0.0
+Y_patch[Y_patch == -9999] = 0.0
+
+# ... rest of normalization code ...
+
+# Add mask to metadata (no model changes needed)
+metadata['X_mask'] = X_valid_mask  # Can convert to tensor later if needed
+metadata['Y_mask'] = Y_valid_mask
+
+'''
+
+
+
+#########
 import torch
 from torch.utils.data import Dataset, DataLoader
 import zarr
@@ -314,8 +342,8 @@ class ASOPatchDataset(Dataset):
             Y_patch = Y_padded
         
         # Handle NaN values
-        X_patch = np.nan_to_num(X_patch, nan=0.0)
-        Y_patch = np.nan_to_num(Y_patch, nan=0.0)
+        X_patch = np.nan_to_num(X_patch, nan=-1) ## set nan values to -1 and hope the model learns it 
+        Y_patch = np.nan_to_num(Y_patch, nan=-1)
         
         # Normalize
         if self.normalize:
