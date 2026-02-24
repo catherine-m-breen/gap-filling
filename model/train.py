@@ -7,7 +7,7 @@ from pathlib import Path
 from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
-
+import zarr
 from models import AttentionUNet, RandomForestBaseline
 
 
@@ -24,7 +24,7 @@ class Config:
     normalize = True
     random_crop_train = False
 
-    epochs = 20
+    epochs = 2
     lr = 1e-3
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -213,5 +213,34 @@ def train():
         print(f"Channel {i}: {score:.4f}")
 
 
+def check_zarr_validity(zarr_dir: str):
+    """Check all zarr files for invalid target values."""
+    print("\n" + "="*80)
+    print("CHECKING ZARR FILES FOR DATA QUALITY ISSUES")
+    print("="*80)
+    
+    zarr_files = list(Path(zarr_dir).glob("*.zarr"))
+    
+    for zarr_path in zarr_files[:10]:  # Check first 10
+        z = zarr.open(str(zarr_path), mode='r')
+        Y = np.array(z['Y'], dtype=np.float32)
+        
+        # Check for issues
+        has_nan = np.isnan(Y).any()
+        has_neg = (Y < 0).any()
+        has_extreme = (Y > 10).any()  # >10m is suspicious
+        
+        if has_nan or has_neg or has_extreme:
+            print(f"\n  {zarr_path.name}:")
+            print(f"   NaN values: {np.isnan(Y).sum()}")
+            print(f"   Negative values: {(Y < 0).sum()}")
+            print(f"   Values > 10m: {(Y > 10).sum()}")
+            print(f"   Min: {np.nanmin(Y):.2f}m, Max: {np.nanmax(Y):.2f}m")
+            print(f"   Mean: {np.nanmean(Y[~np.isnan(Y)]):.2f}m")
+
 if __name__ == "__main__":
+    
+    # Run this before training
+        zarr_dir = "/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks"
+        check_zarr_validity(zarr_dir)
         train()

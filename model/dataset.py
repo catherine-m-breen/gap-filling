@@ -298,7 +298,7 @@ class ASOPatchDataset(Dataset):
         X_patch = X[:, row:row+self.patch_size, col:col+self.patch_size]
         Y_patch = Y[:, row:row+self.patch_size, col:col+self.patch_size]
 
-        # Padding for edge cases
+        # Padding for edge cases; pads with zeros
         if X_patch.shape[1] < self.patch_size or X_patch.shape[2] < self.patch_size:
             X_padded = np.zeros((X_patch.shape[0], self.patch_size, self.patch_size), dtype=np.float32)
             Y_padded = np.zeros((Y_patch.shape[0], self.patch_size, self.patch_size), dtype=np.float32)
@@ -318,7 +318,7 @@ class ASOPatchDataset(Dataset):
         # One-hot encode snow_map (channel 0)
         # -----------------------
         snow_orig = X_patch[0]  # Original snow class
-        # Map original classes 0,1,2,4,5,6,7 → 0..6
+        # Map original classes 0,1,2,4,5,6,7 
         snow_mapped = np.vectorize(SNOW_CLASS_TO_IDX.get)(snow_orig)
         snow_onehot = np.zeros((NUM_SNOW_CLASSES, self.patch_size, self.patch_size), dtype=np.float32)
         for i in range(NUM_SNOW_CLASSES):
@@ -326,6 +326,7 @@ class ASOPatchDataset(Dataset):
 
         # Replace original snow channel with one-hot channels
         X_patch = np.concatenate([snow_onehot, X_patch[1:]], axis=0)
+
         
         # -----------------------
         # Update mask to match new channel count (17 channels)
@@ -535,3 +536,4 @@ def create_dataloaders(
         )
     
     return dataloaders
+
