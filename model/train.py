@@ -22,7 +22,7 @@ class Config:
     stride = 128
     num_workers = 4
     normalize = True
-    random_crop_train = True
+    random_crop_train = False
 
     epochs = 20
     lr = 1e-3

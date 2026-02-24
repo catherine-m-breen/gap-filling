@@ -463,7 +463,7 @@ def create_dataloaders(
     stride: int = 128,
     num_workers: int = 4,
     normalize: bool = True,
-    random_crop_train: bool = True
+    random_crop_train: bool = False
 ) -> Dict[str, DataLoader]:
     """Create train, val, and test dataloaders with proper normalization."""
     
