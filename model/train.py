@@ -24,7 +24,7 @@ class Config:
     normalize = True
     random_crop_train = False
 
-    epochs = 2
+    epochs = 20
     lr = 1e-3
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -67,7 +67,7 @@ def train():
     )
 
     # ============================================================
-    # 1️⃣ Train Attention U-Net
+    # 1. Train Attention U-Net
     # ============================================================
 
     print("\n==============================")
@@ -146,7 +146,7 @@ def train():
             best_val_loss = val_loss
             save_path = os.path.join(cfg.save_dir, cfg.unet_name)
             torch.save(model.state_dict(), save_path)
-            print("Saved best U-Net to {save_path}")
+            print(f"Saved best U-Net to {save_path}")
 
     # ============================================================
     # Plot Training and Validation Loss
@@ -181,7 +181,7 @@ def train():
     print(f"Saved loss values to {loss_txt_path}")
 
     # ============================================================
-    # 2️⃣ Train Random Forest Baseline
+    # 2. Train Random Forest Baseline
     # ============================================================
 
     print("\n==============================")
