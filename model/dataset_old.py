@@ -333,7 +333,7 @@ class ASOPatchDataset(Dataset):
         # FIX 1: PROPER HANDLING OF INVALID VALUES
         # ========================================
         # Create validity masks BEFORE replacing values
-        X_valid_mask = ~(np.isnan(X_patch) | (X_patch == -9999) | (X_patch == 255))  # ← Add 255
+        X_valid_mask = ~(np.isnan(X_patch) | (X_patch == -9999))
         Y_valid_mask = ~(np.isnan(Y_patch) | (Y_patch == -9999))
         
         # Replace invalid values with 0
@@ -341,35 +341,17 @@ class ASOPatchDataset(Dataset):
         Y_patch[~Y_valid_mask] = 0.0
         
         # ========================================
-        # FIX 2: SELECTIVE NORMALIZATION
+        # FIX 2: PROPER NORMALIZATION
         # ========================================
         if self.normalize and self.global_stats is not None:
-            # Define which channels are continuous (to normalize)
-            # Based on your channel order:
-            # 0: snow_class (categorical - DON'T normalize)
-            # 1: landcover (categorical - DON'T normalize)
-            # 2: canopy_cover (continuous? - could go either way)
-            # 3: elevation (continuous - normalize)
-            # 4-7: brightness temps (continuous - normalize)
-            # 8: NDSI (continuous - normalize)
-            # 9-10: forest masks (binary - DON'T normalize)
-            
-            continuous_channels = [3, 4, 5, 6, 7, 8]  # Elevation, TBs, NDSI
-            categorical_channels = [0, 1, 2, 9, 10]   # Snow, land, canopy, masks
-            
+            # Normalize using GLOBAL statistics
             X_mean = self.global_stats['X_mean'][:, None, None]  # (11, 1, 1)
             X_std = self.global_stats['X_std'][:, None, None]
             Y_mean = self.global_stats['Y_mean']
             Y_std = self.global_stats['Y_std']
             
-            # Only normalize continuous channels
-            for c in continuous_channels:
-                X_patch[c] = (X_patch[c] - X_mean[c]) / (X_std[c] + 1e-8)
-            
-            # Categorical channels stay as-is (no normalization)
-            # They're already in reasonable ranges
-            
-            # Normalize target (SWE is continuous)
+            # Z-score normalization
+            X_patch = (X_patch - X_mean) / (X_std + 1e-8)
             Y_patch = (Y_patch - Y_mean) / (Y_std + 1e-8)
             
             # Re-zero invalid locations after normalization
@@ -397,13 +379,13 @@ class ASOPatchDataset(Dataset):
         
         return X_tensor, Y_tensor, metadata
 
+
 # ========================================
 # FIX 3: COMPUTE GLOBAL STATISTICS
 # ========================================
 def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
     """
     Compute global mean/std from the training set for proper normalization.
-    Only computes stats for continuous features.
     """
     print(f"\nComputing global statistics from {split} split...")
     
@@ -415,17 +397,12 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
         random_crop=False
     )
     
-    # Define which channels are continuous
-    continuous_channels = [3, 4, 5, 6, 7, 8]  # Elevation, TBs, NDSI
-    categorical_channels = [0, 1, 2, 9, 10]   # Snow, land, canopy, masks
-    
-    # Accumulate statistics only for continuous channels
+    # Accumulate statistics
     X_sum = np.zeros(11, dtype=np.float64)
     X_sq_sum = np.zeros(11, dtype=np.float64)
-    X_count = np.zeros(11, dtype=np.int64)
-    
     Y_sum = 0.0
     Y_sq_sum = 0.0
+    X_count = np.zeros(11, dtype=np.int64)
     Y_count = 0
     
     print("Scanning all patches...")
@@ -434,14 +411,13 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
         X = X.numpy()
         Y = Y.numpy()
         
-        # Only count valid values for continuous channels
-        for c in continuous_channels:
-            valid_mask = (X[c] != 0) & (X[c] != -9999) & (X[c] != 255) & ~np.isnan(X[c])
+        # Only count valid values
+        for c in range(11):
+            valid_mask = (X[c] != 0) & (X[c] != -9999) & ~np.isnan(X[c])
             X_sum[c] += X[c][valid_mask].sum()
             X_sq_sum[c] += (X[c][valid_mask] ** 2).sum()
             X_count[c] += valid_mask.sum()
         
-        # Target (SWE)
         Y_valid_mask = (Y != 0) & (Y != -9999) & ~np.isnan(Y)
         Y_sum += Y[Y_valid_mask].sum()
         Y_sq_sum += (Y[Y_valid_mask] ** 2).sum()
@@ -450,38 +426,24 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
         if (i + 1) % 100 == 0:
             print(f"  Processed {i+1}/{len(temp_dataset)} patches")
     
-    # Initialize arrays
-    X_mean = np.zeros(11, dtype=np.float64)
-    X_std = np.ones(11, dtype=np.float64)  # Default std=1
-    
-    # Compute mean and std only for continuous channels
-    for c in continuous_channels:
-        if X_count[c] > 0:
-            X_mean[c] = X_sum[c] / X_count[c]
-            X_var = (X_sq_sum[c] / X_count[c]) - (X_mean[c] ** 2)
-            X_std[c] = np.sqrt(np.maximum(X_var, 0))
-    
-    # Categorical channels: mean=0, std=1 (no normalization effect)
-    for c in categorical_channels:
-        X_mean[c] = 0.0
-        X_std[c] = 1.0
-    
-    # Target (SWE)
+    # Compute mean and std
+    X_mean = X_sum / (X_count + 1e-8)
+    #X_std = np.sqrt(X_sq_sum / (X_count + 1e-8) - X_mean ** 2)
     Y_mean = Y_sum / (Y_count + 1e-8)
+    #Y_std = np.sqrt(Y_sq_sum / (Y_count + 1e-8) - Y_mean ** 2)
+
+        # CORRECT VERSION:
+    X_var = (X_sq_sum / (X_count + 1e-8)) - (X_mean ** 2)
+    X_std = np.sqrt(np.maximum(X_var, 0))  # Clamp to avoid negative
+
     Y_var = (Y_sq_sum / (Y_count + 1e-8)) - (Y_mean ** 2)
     Y_std = np.sqrt(np.maximum(Y_var, 0))
     
     print("\nGlobal Statistics:")
-    print(f"Continuous channels {continuous_channels}:")
-    print(f"  X mean: {X_mean[continuous_channels]}")
-    print(f"  X std: {X_std[continuous_channels]}")
-    print(f"Categorical channels {categorical_channels}:")
-    print(f"  X mean: {X_mean[categorical_channels]} (should be all 0)")
-    print(f"  X std: {X_std[categorical_channels]} (should be all 1)")
+    print(f"X mean: {X_mean}")
+    print(f"X std: {X_std}")
     print(f"Y mean: {Y_mean:.2f}")
     print(f"Y std: {Y_std:.2f}")
-    print(f"X counts: {X_count}")
-    print(f"Y count: {Y_count}")
     
     return {
         'X_mean': X_mean,
@@ -489,6 +451,7 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
         'Y_mean': Y_mean,
         'Y_std': Y_std
     }
+
 
 # ========================================
 # FIX 4: UPDATED DATALOADER CREATION
@@ -537,3 +500,283 @@ def create_dataloaders(
         )
     
     return dataloaders
+
+
+# class ASOPatchDataset(Dataset):
+#     """
+#     PyTorch Dataset for ASO SWE data stored as Zarr files.
+#     Extracts patches from zarr arrays and splits by basin.
+#     """
+    
+#     def __init__(
+#         self,
+#         zarr_dir: str,
+#         split: str = 'train',
+#         patch_size: int = 256,
+#         stride: int = 128,
+#         normalize: bool = True,
+#         random_crop: bool = False,
+#         seed: int = 42
+#     ):
+#         """
+#         Args:
+#             zarr_dir: Directory containing .zarr files
+#             split: 'train', 'val', or 'test'
+#             patch_size: Size of square patches to extract
+#             stride: Stride for sliding window (if stride < patch_size, patches overlap)
+#             split_basin_dict: Dictionary mapping split names to basin lists
+#             flight_to_basin: Dictionary mapping flight filenames to basin names
+#             normalize: Whether to normalize SWE values
+#             random_crop: If True, randomly sample patches instead of sliding window
+#             seed: Random seed
+#         """
+#         self.zarr_dir = Path(zarr_dir)
+#         self.split = split
+#         self.patch_size = patch_size
+#         self.stride = stride
+#         self.normalize = normalize
+#         self.random_crop = random_crop
+        
+#         random.seed(seed)
+#         np.random.seed(seed)
+        
+#         # Get basins for this split
+#         self.basins = split_basin_dict[split]
+        
+#         # Find all zarr files for this split
+#         self.zarr_files = self._get_zarr_files()
+        
+#         # Create patch index: list of (file_idx, row, col) tuples
+#         self.patches = self._create_patch_index()
+        
+#         print(f"{split.upper()} split: {len(self.zarr_files)} files, {len(self.patches)} patches")
+#         print(f"Basins: {self.basins}")
+        
+#     def _get_zarr_files(self) -> List[Path]:
+#         """Get list of zarr files belonging to basins in this split."""
+#         zarr_files = []
+        
+#         for zarr_path in sorted(self.zarr_dir.glob("*.zarr")):
+#             # Convert zarr filename to tif filename for lookup
+#             tif_name = zarr_path.stem + '.tif'
+            
+#             # Check if this flight belongs to a basin in our split
+#             if tif_name in flight_to_basin:
+#                 basin = flight_to_basin[tif_name]
+#                 if basin in self.basins:
+#                     zarr_files.append(zarr_path)
+                    
+#         return zarr_files
+    
+#     def _create_patch_index(self) -> List[Tuple[int, int, int]]:
+#         """
+#         Create index of all patches across all files.
+#         Returns list of (file_idx, row_start, col_start) tuples.
+#         """
+#         patches = []
+        
+#         for file_idx, zarr_path in enumerate(self.zarr_files):
+#             # Open zarr array to get shape
+#             z = zarr.open(str(zarr_path), mode='r')
+            
+#             # Assuming zarr array is (height, width) or (1, height, width)
+#             X = z['X']  # <-- FIX: Get the dataset from the group
+#             _, height, width = X.shape  # <-- (channels, height, width)
+
+#             if self.random_crop:
+#                 # For random cropping, we'll sample on-the-fly
+#                 # Just create one entry per file
+#                 patches.append((file_idx, -1, -1))
+#             else:
+#                 # Create sliding window patches
+#                 for row in range(0, height - self.patch_size + 1, self.stride):
+#                     for col in range(0, width - self.patch_size + 1, self.stride):
+#                         patches.append((file_idx, row, col))
+        
+#         return patches
+    
+#     def __len__(self) -> int:
+#         return len(self.patches)
+    
+#     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, Dict]:
+#         """
+#         Returns:
+#             patch: Tensor of shape (C, H, W)
+#             metadata: Dict with file info, basin, location, etc.
+#         """
+#         file_idx, row, col = self.patches[idx]
+#         zarr_path = self.zarr_files[file_idx]
+        
+#         # Load zarr array
+#         z = zarr.open(str(zarr_path), mode='r')
+        
+#         # Get X (features) and Y (target SWE) datasets
+#         X = z['X']  # (11, H, W)
+#         Y = z['Y']  # (1, H, W)
+        
+#         _, height, width = X.shape
+        
+            
+#             # Random crop if enabled
+#         if self.random_crop or (row == -1 and col == -1):
+#             row = np.random.randint(0, max(1, height - self.patch_size))
+#             col = np.random.randint(0, max(1, width - self.patch_size))
+        
+#         # Extract patches
+#         X_patch = X[:, row:row+self.patch_size, col:col+self.patch_size]
+#         Y_patch = Y[:, row:row+self.patch_size, col:col+self.patch_size]
+        
+#         # Convert to numpy
+#         X_patch = np.array(X_patch)
+#         Y_patch = np.array(Y_patch)
+        
+#         # Handle edge cases where patch is smaller than patch_size
+#         if X_patch.shape[1] < self.patch_size or X_patch.shape[2] < self.patch_size:
+#             X_padded = np.zeros((X_patch.shape[0], self.patch_size, self.patch_size), dtype=np.float32)
+#             Y_padded = np.zeros((Y_patch.shape[0], self.patch_size, self.patch_size), dtype=np.float32)
+            
+#             X_padded[:, :X_patch.shape[1], :X_patch.shape[2]] = X_patch
+#             Y_padded[:, :Y_patch.shape[1], :Y_patch.shape[2]] = Y_patch
+            
+#             X_patch = X_padded
+#             Y_patch = Y_padded
+        
+#         # Handle NaN values
+#         X_patch = np.nan_to_num(X_patch, nan=-1) ## set nan values to -1 and hope the model learns it 
+#         Y_patch = np.nan_to_num(Y_patch, nan=-1)
+        
+#         # Normalize
+#         if self.normalize:
+#             # Per-channel normalization for features
+#             for c in range(X_patch.shape[0]):
+#                 channel_max = X_patch[c].max()
+#                 if channel_max > 0:
+#                     X_patch[c] = X_patch[c] / channel_max
+            
+#             # Normalize target
+#             y_max = Y_patch.max()
+#             if y_max > 0:
+#                 Y_patch = Y_patch / y_max
+        
+#         # Convert to tensors
+#         X_tensor = torch.from_numpy(X_patch).float()
+#         Y_tensor = torch.from_numpy(Y_patch).float()
+        
+#         # Get metadata
+#         tif_name = zarr_path.stem + '.tif'
+#         basin = flight_to_basin.get(tif_name, 'Unknown')
+        
+#         metadata = {
+#             'file': zarr_path.name,
+#             'basin': basin,
+#             'row': row,
+#             'col': col,
+#             'height': height,
+#             'width': width
+#         }
+        
+#         return X_tensor, Y_tensor, metadata
+
+
+# def create_dataloaders(
+#     zarr_dir: str,
+#     batch_size: int = 32,
+#     patch_size: int = 256,
+#     stride: int = 128,
+#     num_workers: int = 4,
+#     normalize: bool = True,
+#     random_crop_train: bool = True
+# ) -> Dict[str, DataLoader]:
+#     """
+#     Create train, val, and test dataloaders.
+    
+#     Args:
+#         zarr_dir: Directory containing .zarr files
+#         batch_size: Batch size
+#         patch_size: Size of square patches
+#         stride: Stride for sliding window extraction
+#         num_workers: Number of workers for dataloading
+#         normalize: Whether to normalize data
+#         random_crop_train: Whether to use random cropping for training
+        
+#     Returns:
+#         Dictionary with 'train', 'val', 'test' dataloaders
+#     """
+    
+#     datasets = {}
+#     dataloaders = {}
+    
+#     for split in ['train', 'val', 'test']:
+#         # Use random crop only for training
+#         use_random = False #random_crop_train if split == 'train' else False
+        
+#         datasets[split] = ASOPatchDataset(
+#             zarr_dir=zarr_dir,
+#             split=split,
+#             patch_size=patch_size,
+#             stride=stride,
+#             normalize=normalize,
+#             random_crop=use_random
+#         )
+        
+#         # Shuffle only for training
+#         shuffle = (split == 'train')
+        
+#         dataloaders[split] = DataLoader(
+#             datasets[split],
+#             batch_size=batch_size,
+#             shuffle=shuffle,
+#             num_workers=num_workers,
+#             pin_memory=True,
+#             drop_last=(split == 'train')  # Drop last incomplete batch for training
+#         )
+    
+#     return dataloaders
+
+
+# # Example usage
+# if __name__ == "__main__":
+    
+#     zarr_dir = "/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks"
+    ## example zarr = "/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks/ASO_YampaRiver_2025May22-24_swe_50m.zarr"
+#     # Create dataloaders
+#     dataloaders = create_dataloaders(
+#         zarr_dir=zarr_dir,
+#         batch_size=16,
+#         patch_size=256,
+#         stride=128,
+#         num_workers=4,
+#         normalize=True,
+#         random_crop_train=True
+#     )
+    
+#     # Test loading
+#     print("\n=== Testing Dataloaders ===")
+#     for split in ['train', 'val', 'test']:
+#         dataloader = dataloaders[split]
+#         print(f"\n{split.upper()}:")
+        
+#         # Get one batch
+#         #batch_X, batch_Y, batch_metadata
+#         batch_X, batch_Y, batch_metadata = next(iter(dataloader))
+        
+#         print(f"  Features shape: {batch_X.shape}")  # (batch, 11, 256, 256)
+#         print(f"  Target shape: {batch_Y.shape}")    # (batch, 1, 256, 256)
+#         print(f"  X range: [{batch_X.min():.3f}, {batch_X.max():.3f}]")
+#         print(f"  Y range: [{batch_Y.min():.3f}, {batch_Y.max():.3f}]")
+#         print(f"  Sample basins: {batch_metadata['basin'][:3]}")
+#         print(f"  Sample files: {batch_metadata['file'][:3]}")
+        
+#         # Count total patches
+#         total = 0
+#         for batch_X, batch_Y, _ in dataloader:  # UNPACK 3 VALUES
+#             total += batch_X.size(0)
+#         print(f"  Total patches: {total}")
+
+# # Simple usage
+# dataloaders = create_dataloaders(
+#     zarr_dir="/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks",
+#     batch_size=32,
+#     patch_size=256,
+#     stride=128  # 50% overlap
+# )
