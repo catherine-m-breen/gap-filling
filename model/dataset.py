@@ -307,18 +307,18 @@ class ASOPatchDataset(Dataset):
             X_patch, Y_patch = X_padded, Y_padded
 
         # -----------------------
-        # Handle invalid values
+        # Handle invalid values (BEFORE one-hot encoding)
         # -----------------------
-        X_valid_mask = ~(np.isnan(X_patch) | (X_patch == -9999) | (X_patch[0] == 255) | (X_patch[1] == 250))
+        X_valid_mask_orig = ~(np.isnan(X_patch) | (X_patch == -9999) | (X_patch[0] == 255) | (X_patch[1] == 250))
         Y_valid_mask = ~(np.isnan(Y_patch) | (Y_patch == -9999))
-        X_patch[~X_valid_mask] = 0.0
+        X_patch[~X_valid_mask_orig] = 0.0
         Y_patch[~Y_valid_mask] = 0.0
 
         # -----------------------
         # One-hot encode snow_map (channel 0)
         # -----------------------
         snow_orig = X_patch[0]  # Original snow class
-        # Map original classes 0,1,2,5,6 → 0..4
+        # Map original classes 0,1,2,4,5,6,7 → 0..6
         snow_mapped = np.vectorize(SNOW_CLASS_TO_IDX.get)(snow_orig)
         snow_onehot = np.zeros((NUM_SNOW_CLASSES, self.patch_size, self.patch_size), dtype=np.float32)
         for i in range(NUM_SNOW_CLASSES):
@@ -326,17 +326,28 @@ class ASOPatchDataset(Dataset):
 
         # Replace original snow channel with one-hot channels
         X_patch = np.concatenate([snow_onehot, X_patch[1:]], axis=0)
+        
+        # -----------------------
+        # Update mask to match new channel count (17 channels)
+        # -----------------------
+        # Original mask had 11 channels, now we need 17 (7 snow one-hot + 10 others)
+        # For snow one-hot channels (0-6): use the same mask as original snow channel
+        # For remaining channels (7-16): use original channels 1-10
+        X_valid_mask = np.zeros((17, self.patch_size, self.patch_size), dtype=bool)
+        for i in range(NUM_SNOW_CLASSES):  # Channels 0-6
+            X_valid_mask[i] = X_valid_mask_orig[0]  # All snow one-hot use original snow mask
+        X_valid_mask[7:] = X_valid_mask_orig[1:]  # Channels 7-16 use original 1-10
 
         # -----------------------
         # Normalize continuous channels
         # -----------------------
         if self.normalize and self.global_stats is not None:
-            # Continuous: [canopy_cover(2), elevation(3), brightness 4-7, ndsi(8)]
-            # NOTE: after adding snow one-hot, channel indices shift by NUM_SNOW_CLASSES-1
-            shift = NUM_SNOW_CLASSES - 1
-            continuous_channels = np.array([2, 3, 4, 5, 6, 7, 8]) + shift
+            # After one-hot encoding: channels 8, 9, 10-13, 14 are continuous
+            continuous_channels = [8, 9, 10, 11, 12, 13, 14]  # canopy, elevation, 4 TBs, NDSI
+            
             X_mean = self.global_stats['X_mean'][:, None, None]
             X_std = self.global_stats['X_std'][:, None, None]
+            
             for c in continuous_channels:
                 X_patch[c] = (X_patch[c] - X_mean[c]) / (X_std[c] + 1e-8)
             
@@ -372,7 +383,7 @@ class ASOPatchDataset(Dataset):
 def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
     """
     Compute global mean/std from the training set for proper normalization.
-    Only computes stats for continuous features.
+    Only computes stats for continuous features AFTER one-hot encoding.
     """
     print(f"\nComputing global statistics from {split} split...")
     
@@ -384,14 +395,26 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
         random_crop=False
     )
     
-    # Define which channels are continuous
-    continuous_channels = [2, 3, 4, 5, 6, 7, 8]  # Elevation, TBs, NDSI
-    categorical_channels = [0, 1, 9, 10]   # Snow, land, canopy, masks
+    # After one-hot encoding: 17 channels total
+    # [0-6]: snow one-hot (7 classes)
+    # [7]: land_class (categorical)
+    # [8]: canopy_cover (continuous)
+    # [9]: elevation (continuous)
+    # [10-13]: brightness bands (continuous, 4 bands)
+    # [14]: ndsi (continuous)
+    # [15]: canopy_mask (categorical)
+    # [16]: snow_mask (categorical)
     
-    # Accumulate statistics only for continuous channels
-    X_sum = np.zeros(11, dtype=np.float64)
-    X_sq_sum = np.zeros(11, dtype=np.float64)
-    X_count = np.zeros(11, dtype=np.int64)
+    NUM_CHANNELS = NUM_SNOW_CLASSES + 10  # 7 + 10 = 17
+    
+    # Define which channels are continuous (AFTER one-hot encoding)
+    continuous_channels = [8, 9, 10, 11, 12, 13, 14]  # canopy_cover, elevation, 4 TBs, NDSI
+    categorical_channels = list(range(0, 7)) + [7, 15, 16]  # Snow one-hot, land, masks
+    
+    # Accumulate statistics
+    X_sum = np.zeros(NUM_CHANNELS, dtype=np.float64)
+    X_sq_sum = np.zeros(NUM_CHANNELS, dtype=np.float64)
+    X_count = np.zeros(NUM_CHANNELS, dtype=np.int64)
     
     Y_sum = 0.0
     Y_sq_sum = 0.0
@@ -407,14 +430,8 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
         Y_mask = metadata['Y_mask'].numpy().astype(bool)
         
         # Only count valid values for continuous channels
-        # for c in continuous_channels:
-        #     valid_mask = (X[c] != -9999) & (X[c] != 255) & ~np.isnan(X[c]) #(X[c] != 0) &
-        #     X_sum[c] += X[c][valid_mask].sum()
-        #     X_sq_sum[c] += (X[c][valid_mask] ** 2).sum()
-        #     X_count[c] += valid_mask.sum()
-
         for c in continuous_channels:
-            valid_mask = X_mask[c]  # ← USE THE TRUE MASK
+            valid_mask = X_mask[c]  # Use the true mask
             valid_values = X[c][valid_mask]
 
             X_sum[c] += valid_values.sum()
@@ -422,12 +439,6 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
             X_count[c] += valid_values.size
                 
         # Target (SWE)
-        # Y_valid_mask = (Y != -9999) & ~np.isnan(Y) #(Y != 0) &
-        # Y_mask = metadata['Y_mask'].numpy().astype(bool)
-        # Y_valid_mask = Y[Y_mask]
-        # Y_sum += Y[Y_valid_mask].sum()
-        # Y_sq_sum += (Y[Y_valid_mask] ** 2).sum()
-        # Y_count += Y_valid_mask.sum()
         Y_valid_values = Y[Y_mask]
         Y_sum += Y_valid_values.sum()
         Y_sq_sum += (Y_valid_values ** 2).sum()
@@ -436,9 +447,9 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
         if (i + 1) % 100 == 0:
             print(f"  Processed {i+1}/{len(temp_dataset)} patches")
     
-    # Initialize arrays
-    X_mean = np.zeros(11, dtype=np.float64)
-    X_std = np.ones(11, dtype=np.float64)  # Default std=1
+    # Initialize arrays for 17 channels
+    X_mean = np.zeros(NUM_CHANNELS, dtype=np.float64)
+    X_std = np.ones(NUM_CHANNELS, dtype=np.float64)  # Default std=1
     
     # Compute mean and std only for continuous channels
     for c in continuous_channels:
@@ -475,6 +486,7 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
         'Y_mean': Y_mean,
         'Y_std': Y_std
     }
+
 
 # ========================================
 # FIX 4: UPDATED DATALOADER CREATION
