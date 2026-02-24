@@ -213,6 +213,7 @@ def analyze_by_snow_class(predictions, targets, masks, snow_map_channel):
     Snow map classes typically: 1=snow, 2=ice, 3=water, etc.
     """
     unique_classes = np.unique(snow_map_channel[masks])
+    print(f'unique snow map classed {unique_classes}')
     
     results = []
     

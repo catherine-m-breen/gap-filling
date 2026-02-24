@@ -75,7 +75,7 @@ def train():
     print("==============================")
 
     model = AttentionUNet(in_channels=11, out_channels=1).to(cfg.device)
-    criterion = nn.L1Loss()   # Better for SWE
+    criterion = nn.L1Loss()   # Better for SWE / regression problems
     optimizer = optim.Adam(model.parameters(), lr=cfg.lr)
 
     best_val_loss = float("inf")
