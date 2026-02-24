@@ -36,7 +36,7 @@ class EvalConfig:
     
     # SWE bins for analysis (in mm, before normalization)
     # Adjust these based on your data distribution
-    swe_bins = [0, 100, 500, 10000]  # Low: 0-100, Medium: 100-500, High: 500+
+    swe_bins = [0, 0.3, 0.6, 1.2]  # Low: 0-100, Medium: 100-500, High: 500+
     swe_labels = ['Low', 'Medium', 'High']
     
     # Tree canopy bins (%)
@@ -302,7 +302,7 @@ def evaluate():
     test_loader = dataloaders['test']
     
     # ============================================================
-    # 1️⃣ Evaluate Attention U-Net
+    # 1. Evaluate Attention U-Net
     # ============================================================
     
     print("\n" + "="*60)
@@ -347,8 +347,8 @@ def evaluate():
     # Assuming channel order: [elevation, slope, aspect, northness, eastness, 
     #                          tree_canopy, snow_map, dem, ?, ?, ?]
     # ADJUST THESE INDICES BASED ON YOUR ACTUAL DATA!
-    CANOPY_CHANNEL = 5   # Tree canopy cover
-    SNOW_MAP_CHANNEL = 6  # Snow map classification
+    CANOPY_CHANNEL = 2   # Tree canopy cover
+    SNOW_MAP_CHANNEL = 0  # Snow map classification
     
     canopy = unet_data['features'][CANOPY_CHANNEL, :]
     snow_map = unet_data['features'][SNOW_MAP_CHANNEL, :]
@@ -402,7 +402,7 @@ def evaluate():
     )
     
     # ============================================================
-    # 2️⃣ Evaluate Random Forest (if trained)
+    # 2. Evaluate Random Forest 
     # ============================================================
     
     rf_path = Path(cfg.checkpoint_dir) / cfg.rf_name
@@ -463,7 +463,7 @@ def evaluate():
         )
     
     # ============================================================
-    # 3️⃣ Model Comparison
+    # 3. Model Comparison
     # ============================================================
     
     print("\n" + "="*60)
@@ -482,7 +482,7 @@ def evaluate():
     print(comparison.to_string(index=False))
     comparison.to_csv(Path(cfg.results_dir) / 'model_comparison.csv', index=False)
     
-    print(f"\n✅ Evaluation complete! Results saved to {cfg.results_dir}/")
+    print(f"\n Evaluation complete. Results saved to {cfg.results_dir}/")
 
 
 if __name__ == "__main__":
