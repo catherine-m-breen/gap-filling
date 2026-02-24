@@ -354,8 +354,8 @@ class ASOPatchDataset(Dataset):
             # 8: NDSI (continuous - normalize)
             # 9-10: forest masks (binary - DON'T normalize)
             
-            continuous_channels = [3, 4, 5, 6, 7, 8]  # Elevation, TBs, NDSI
-            categorical_channels = [0, 1, 2, 9, 10]   # Snow, land, canopy, masks
+            continuous_channels = [2, 3, 4, 5, 6, 7, 8]  # Elevation, TBs, NDSI
+            categorical_channels = [0, 1, 9, 10]   # Snow, land, forested and unforested masks
             
             X_mean = self.global_stats['X_mean'][:, None, None]  # (11, 1, 1)
             X_std = self.global_stats['X_std'][:, None, None]
@@ -363,8 +363,9 @@ class ASOPatchDataset(Dataset):
             Y_std = self.global_stats['Y_std']
             
             # Only normalize continuous channels
+            ### NORMALIZING THE CONTINUOUS CHANNELS ONLY
             for c in continuous_channels:
-                X_patch[c] = (X_patch[c] - X_mean[c]) / (X_std[c] + 1e-8)
+                X_patch[c] = (X_patch[c] - X_mean[c]) / (X_std[c]) # + 1e-8)
             
             # Categorical channels stay as-is (no normalization)
             # They're already in reasonable ranges
