@@ -354,7 +354,7 @@ class ASOPatchDataset(Dataset):
             # 8: NDSI (continuous - normalize)
             # 9-10: forest masks (binary - DON'T normalize)
             
-            continuous_channels = [2, 3, 4, 5, 6, 7, 8]  # Elevation, TBs, NDSI
+            continuous_channels = [2, 3, 4, 5, 6, 7, 8]  # Tree cover, Elevation, TBs, NDSI
             categorical_channels = [0, 1, 9, 10]   # Snow, land, forested and unforested masks
             
             X_mean = self.global_stats['X_mean'][:, None, None]  # (11, 1, 1)
@@ -377,6 +377,15 @@ class ASOPatchDataset(Dataset):
             X_patch = X_patch * X_valid_mask
             Y_patch = Y_patch * Y_valid_mask
         
+        if idx == 0:  # Only print for first patch
+            print("\n=== DEBUG NORMALIZATION ===")
+            print(f"Snow class (channel 0) after normalization:")
+            print(f"  Unique values: {np.unique(X_patch[0])[: 20]}")
+            print(f"  Mean for cat channels: {X_mean[0].item()}, {X_mean[1].item()}")
+            print(f"  Std for cat channels: {X_std[0].item()}, {X_std[1].item()}")
+            print(f"  X_mean shape: {X_mean.shape}")
+            print(f"  X_std shape: {X_std.shape}")
+
         # Convert to tensors
         X_tensor = torch.from_numpy(X_patch).float()
         Y_tensor = torch.from_numpy(Y_patch).float()
