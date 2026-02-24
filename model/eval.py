@@ -331,7 +331,7 @@ def evaluate():
     print(f"  Y_mean: {global_stats['Y_mean']:.4f}")
     print(f"  Y_std: {global_stats['Y_std']:.4f}")
 
-        # ========================================
+    # ========================================
     # GET GLOBAL STATS from the dataset
     # ========================================
 

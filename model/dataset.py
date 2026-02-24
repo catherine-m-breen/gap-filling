@@ -426,8 +426,8 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
     )
     
     # Define which channels are continuous
-    continuous_channels = [3, 4, 5, 6, 7, 8]  # Elevation, TBs, NDSI
-    categorical_channels = [0, 1, 2, 9, 10]   # Snow, land, canopy, masks
+    continuous_channels = [2, 3, 4, 5, 6, 7, 8]  # Elevation, TBs, NDSI
+    categorical_channels = [0, 1, 9, 10]   # Snow, land, canopy, masks
     
     # Accumulate statistics only for continuous channels
     X_sum = np.zeros(11, dtype=np.float64)
@@ -446,13 +446,13 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
         
         # Only count valid values for continuous channels
         for c in continuous_channels:
-            valid_mask = (X[c] != 0) & (X[c] != -9999) & (X[c] != 255) & ~np.isnan(X[c])
+            valid_mask = (X[c] != -9999) & (X[c] != 255) & ~np.isnan(X[c]) #(X[c] != 0) &
             X_sum[c] += X[c][valid_mask].sum()
             X_sq_sum[c] += (X[c][valid_mask] ** 2).sum()
             X_count[c] += valid_mask.sum()
         
         # Target (SWE)
-        Y_valid_mask = (Y != 0) & (Y != -9999) & ~np.isnan(Y)
+        Y_valid_mask = (Y != -9999) & ~np.isnan(Y) #(Y != 0) &
         Y_sum += Y[Y_valid_mask].sum()
         Y_sq_sum += (Y[Y_valid_mask] ** 2).sum()
         Y_count += Y_valid_mask.sum()
