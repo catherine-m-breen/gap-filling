@@ -38,11 +38,10 @@ import random
 import IPython
 
 
-
 land_class_dict = {11: "water", 12: 'perennial ice snow', 21: "Developed, open space", \
                    22: "Developed, Low Intensity", 23: "Developed: Medium Intensity", \
                     24: "Developed, High Intensity", 31: "Bare Rock/Sand/Clay", \
-                   31: "Bare Rock / Sand/ Clay", 41: "Deciduous Forest", 42: "Evergreen Forest", \
+                    41: "Deciduous Forest", 42: "Evergreen Forest", \
                     43: "Mixed Forest", 52: "Shrub/ Scrub", 71: "Grasslands", \
                     81: "Pasture/Hay", 82: "Cultivated Crops", 90: "Woody Wetlands", \
                         95: "Emergent Wetlands"}
@@ -216,7 +215,7 @@ flight_to_basin = {
 # -------------------------------
 # Snow class mapping
 # -------------------------------
-SNOW_CLASSES = [0, 1, 2, 5, 6]  # Original snow class values
+SNOW_CLASSES = [0, 1, 2, 4, 5, 6, 7]  # Original snow class values
 SNOW_CLASS_TO_IDX = {v: i for i, v in enumerate(SNOW_CLASSES)}  # Map to 0..4
 NUM_SNOW_CLASSES = len(SNOW_CLASSES)  # 5
 
