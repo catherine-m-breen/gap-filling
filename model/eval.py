@@ -125,7 +125,7 @@ def collect_predictions(model, dataloader, device, model_type='unet', global_sta
             
             # Get masks from metadata (TRUE validity masks!)
             Y_mask = metadata['Y_mask'].cpu().numpy()  # (B, 1, H, W)
-            X_mask = metadata['X_mask'].cpu().numpy()  # (B, 11, H, W)
+            X_mask = metadata['X_mask'].cpu().numpy()  # (B, 11, H, W) ## i think this is the bug:
             
             # Move to CPU
             pred_np = pred.cpu().numpy()      # (B, 1, H, W)

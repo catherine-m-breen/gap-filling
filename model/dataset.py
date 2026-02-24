@@ -365,7 +365,7 @@ class ASOPatchDataset(Dataset):
             # Only normalize continuous channels
             ### NORMALIZING THE CONTINUOUS CHANNELS ONLY
             for c in continuous_channels:
-                X_patch[c] = (X_patch[c] - X_mean[c]) / (X_std[c]) # + 1e-8)
+                X_patch[c] = (X_patch[c] - X_mean[c]) / (X_std[c]+ 1e-8)
             
             # Categorical channels stay as-is (no normalization)
             # They're already in reasonable ranges
@@ -440,23 +440,40 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
     
     print("Scanning all patches...")
     for i in range(len(temp_dataset)):
-        X, Y, _ = temp_dataset[i]
+        X, Y, metadata = temp_dataset[i]
         X = X.numpy()
         Y = Y.numpy()
+
+        X_mask = metadata['X_mask'].numpy().astype(bool)
+        Y_mask = metadata['Y_mask'].numpy().astype(bool)
         
         # Only count valid values for continuous channels
+        # for c in continuous_channels:
+        #     valid_mask = (X[c] != -9999) & (X[c] != 255) & ~np.isnan(X[c]) #(X[c] != 0) &
+        #     X_sum[c] += X[c][valid_mask].sum()
+        #     X_sq_sum[c] += (X[c][valid_mask] ** 2).sum()
+        #     X_count[c] += valid_mask.sum()
+
         for c in continuous_channels:
-            valid_mask = (X[c] != -9999) & (X[c] != 255) & ~np.isnan(X[c]) #(X[c] != 0) &
-            X_sum[c] += X[c][valid_mask].sum()
-            X_sq_sum[c] += (X[c][valid_mask] ** 2).sum()
-            X_count[c] += valid_mask.sum()
-        
+            valid_mask = X_mask[c]  # ← USE THE TRUE MASK
+            valid_values = X[c][valid_mask]
+
+            X_sum[c] += valid_values.sum()
+            X_sq_sum[c] += (valid_values ** 2).sum()
+            X_count[c] += valid_values.size
+                
         # Target (SWE)
-        Y_valid_mask = (Y != -9999) & ~np.isnan(Y) #(Y != 0) &
-        Y_sum += Y[Y_valid_mask].sum()
-        Y_sq_sum += (Y[Y_valid_mask] ** 2).sum()
-        Y_count += Y_valid_mask.sum()
-        
+        # Y_valid_mask = (Y != -9999) & ~np.isnan(Y) #(Y != 0) &
+        # Y_mask = metadata['Y_mask'].numpy().astype(bool)
+        # Y_valid_mask = Y[Y_mask]
+        # Y_sum += Y[Y_valid_mask].sum()
+        # Y_sq_sum += (Y[Y_valid_mask] ** 2).sum()
+        # Y_count += Y_valid_mask.sum()
+        Y_valid_values = Y[Y_mask]
+        Y_sum += Y_valid_values.sum()
+        Y_sq_sum += (Y_valid_values ** 2).sum()
+        Y_count += Y_valid_values.size
+                    
         if (i + 1) % 100 == 0:
             print(f"  Processed {i+1}/{len(temp_dataset)} patches")
     
