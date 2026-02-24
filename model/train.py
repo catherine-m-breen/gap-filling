@@ -48,6 +48,13 @@ def compute_metrics(pred, target):
 # Training
 # ============================================================
 
+def masked_loss(predictions, targets, mask, loss_fn=nn.L1Loss(reduction='none')):
+    """Compute loss only on valid pixels."""
+    element_loss = loss_fn(predictions, targets)
+    masked_loss_vals = element_loss * mask
+    num_valid = mask.sum() + 1e-8
+    return masked_loss_vals.sum() / num_valid
+
 def train():
 
     cfg = Config()
@@ -121,12 +128,14 @@ def train():
         val_rmse = 0.0
 
         with torch.no_grad():
-            for X, Y, _ in dataloaders['val']:
+            for X, Y, metadata in dataloaders['val']:
                 X = X.to(cfg.device)
                 Y = Y.to(cfg.device)
+                Y_mask = metadata['Y_mask'].to(cfg.device)
 
                 outputs = model(X)
-                loss = criterion(outputs, Y)
+                #loss = criterion(outputs, Y)
+                loss = masked_loss(outputs, Y, Y_mask)  # ← Use masked loss!
 
                 mae, rmse = compute_metrics(outputs, Y)
 
