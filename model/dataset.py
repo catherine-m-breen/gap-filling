@@ -319,7 +319,7 @@ class ASOPatchDataset(Dataset):
         X_valid_mask_orig = ~(np.isnan(X_patch) | (X_patch == -9999) | (X_patch[0] == 255) | (X_patch[1] == 250))
 
         ## catch any other weird values for now: 
-        Y_valid_mask = ~(np.isnan(Y_patch) | (Y_patch == -9999)) | (Y_patch < -0.01) | (Y_patch > 10.0) 
+        Y_valid_mask = ~( np.isnan(Y_patch) |   (Y_patch == -9999) |  (Y_patch < -0.01) |  (Y_patch > 10.0))
 
         X_patch[~X_valid_mask_orig] = 0.0
         Y_patch[~Y_valid_mask] = 0.0
