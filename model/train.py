@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from tqdm import tqdm
 import numpy as np
+import matplotlib.pyplot as plt
 
 from models import AttentionUNet, RandomForestBaseline
 
@@ -78,6 +79,10 @@ def train():
     optimizer = optim.Adam(model.parameters(), lr=cfg.lr)
 
     best_val_loss = float("inf")
+    
+    # Track losses for plotting
+    train_losses = []
+    val_losses = []
 
     for epoch in range(1, cfg.epochs + 1):
 
@@ -102,6 +107,7 @@ def train():
             train_loss += loss.item()
 
         train_loss /= len(dataloaders['train'])
+        train_losses.append(train_loss)
         print(f"Train L1: {train_loss:.6f}")
 
         # -------------------------
@@ -129,6 +135,8 @@ def train():
         val_loss /= len(dataloaders['val'])
         val_mae /= len(dataloaders['val'])
         val_rmse /= len(dataloaders['val'])
+        
+        val_losses.append(val_loss)
 
         print(f"Val L1: {val_loss:.6f}")
         print(f"Val MAE: {val_mae:.6f} | RMSE: {val_rmse:.6f}")
@@ -139,6 +147,38 @@ def train():
             save_path = os.path.join(cfg.save_dir, cfg.unet_name)
             torch.save(model.state_dict(), save_path)
             print(f"✔ Saved best U-Net to {save_path}")
+
+    # ============================================================
+    # Plot Training and Validation Loss
+    # ============================================================
+    
+    print("\n==============================")
+    print("Generating Loss Plot")
+    print("==============================")
+    
+    epochs_range = range(1, cfg.epochs + 1)
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(epochs_range, train_losses, 'b-o', label='Train Loss', linewidth=2, markersize=6)
+    plt.plot(epochs_range, val_losses, 'r-s', label='Val Loss', linewidth=2, markersize=6)
+    plt.xlabel('Epoch', fontsize=12)
+    plt.ylabel('L1 Loss', fontsize=12)
+    plt.title('Training and Validation Loss', fontsize=14, fontweight='bold')
+    plt.legend(fontsize=11)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
+    plot_path = os.path.join(cfg.save_dir, 'loss_curve.png')
+    plt.savefig(plot_path, dpi=150)
+    print(f"✔ Saved loss plot to {plot_path}")
+    
+    # Also save loss values to a text file
+    loss_txt_path = os.path.join(cfg.save_dir, 'loss_values.txt')
+    with open(loss_txt_path, 'w') as f:
+        f.write("Epoch,Train_Loss,Val_Loss\n")
+        for i, (train_l, val_l) in enumerate(zip(train_losses, val_losses), 1):
+            f.write(f"{i},{train_l:.6f},{val_l:.6f}\n")
+    print(f"✔ Saved loss values to {loss_txt_path}")
 
     # ============================================================
     # 2️⃣ Train Random Forest Baseline
