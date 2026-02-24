@@ -146,7 +146,7 @@ def train():
             best_val_loss = val_loss
             save_path = os.path.join(cfg.save_dir, cfg.unet_name)
             torch.save(model.state_dict(), save_path)
-            print(f"✔ Saved best U-Net to {save_path}")
+            print("Saved best U-Net to {save_path}")
 
     # ============================================================
     # Plot Training and Validation Loss
@@ -170,7 +170,7 @@ def train():
     
     plot_path = os.path.join(cfg.save_dir, 'loss_curve.png')
     plt.savefig(plot_path, dpi=150)
-    print(f"✔ Saved loss plot to {plot_path}")
+    print(f"Saved loss plot to {plot_path}")
     
     # Also save loss values to a text file
     loss_txt_path = os.path.join(cfg.save_dir, 'loss_values.txt')
@@ -178,7 +178,7 @@ def train():
         f.write("Epoch,Train_Loss,Val_Loss\n")
         for i, (train_l, val_l) in enumerate(zip(train_losses, val_losses), 1):
             f.write(f"{i},{train_l:.6f},{val_l:.6f}\n")
-    print(f"✔ Saved loss values to {loss_txt_path}")
+    print(f"Saved loss values to {loss_txt_path}")
 
     # ============================================================
     # 2️⃣ Train Random Forest Baseline
@@ -196,7 +196,7 @@ def train():
     rf_path = os.path.join(cfg.save_dir, cfg.rf_name)
     rf.save(rf_path)
 
-    print(f"✔ Saved Random Forest to {rf_path}")
+    print(f"Saved Random Forest to {rf_path}")
 
     # Feature importance
     importance = rf.feature_importance()
