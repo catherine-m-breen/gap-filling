@@ -77,6 +77,8 @@ def train():
     model = AttentionUNet(in_channels=17, out_channels=1).to(cfg.device)
     criterion = nn.L1Loss()   # Better for SWE / regression problems
     optimizer = optim.Adam(model.parameters(), lr=cfg.lr)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer, mode='min', factor=0.5, patience=5)
 
     best_val_loss = float("inf")
     
@@ -140,6 +142,12 @@ def train():
 
         print(f"Val L1: {val_loss:.6f}")
         print(f"Val MAE: {val_mae:.6f} | RMSE: {val_rmse:.6f}")
+
+        scheduler.step(val_loss)
+    
+        # Print current learning rate
+        current_lr = optimizer.param_groups[0]['lr']
+        print(f"Learning Rate: {current_lr:.6e}")
 
         # Save best model
         if val_loss < best_val_loss:
