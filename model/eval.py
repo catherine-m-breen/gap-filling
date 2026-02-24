@@ -156,6 +156,7 @@ def collect_predictions(model, dataloader, device, model_type='unet', global_sta
                 # So they stay as-is (already original values)
             
             # Convert to mm for analysis (SWE in meters → mm)
+            # it already is in meters!
             pred_np = pred_np * 1000
             target_np = target_np * 1000
             
@@ -324,6 +325,40 @@ def evaluate():
     test_dataset = dataloaders['test'].dataset
     global_stats = test_dataset.global_stats
     
+    print("\nGlobal stats being used for denormalization:")
+    print(f"  X_mean: {global_stats['X_mean']}")
+    print(f"  X_std: {global_stats['X_std']}")
+    print(f"  Y_mean: {global_stats['Y_mean']:.4f}")
+    print(f"  Y_std: {global_stats['Y_std']:.4f}")
+
+        # ========================================
+    # GET GLOBAL STATS from the dataset
+    # ========================================
+
+    print("\n" + "="*60)
+    print("GLOBAL STATS DEBUG")
+    print("="*60)
+    print(f"\nX_mean for all channels:")
+    channel_names = ['snow_class', 'landcover', 'canopy', 'elevation', 
+                    'TB_37H', 'TB_37V', 'TB_19H', 'TB_19V', 
+                    'NDSI', 'forested', 'unforested']
+    for i in range(11):
+        print(f"  Ch{i} ({channel_names[i]:12s}): mean={global_stats['X_mean'][i]:10.4f}, std={global_stats['X_std'][i]:10.4f}")
+
+    print(f"\nY (SWE):")
+    print(f"  mean={global_stats['Y_mean']:.6f} m  ({global_stats['Y_mean']*1000:.2f} mm)")
+    print(f"  std={global_stats['Y_std']:.6f} m  ({global_stats['Y_std']*1000:.2f} mm)")
+
+    print("\nCategorical channels (should have mean=0, std=1):")
+    categorical = [0, 1, 9, 10]
+    for c in categorical:
+        print(f"  Ch{c} ({channel_names[c]}): mean={global_stats['X_mean'][c]}, std={global_stats['X_std'][c]}")
+
+    print("\nContinuous channels (should have real stats):")
+    continuous = [2, 3, 4, 5, 6, 7, 8]
+    for c in continuous:
+        print(f"  Ch{c} ({channel_names[c]}): mean={global_stats['X_mean'][c]:.2f}, std={global_stats['X_std'][c]:.2f}")
+
     print("\nGlobal stats being used for denormalization:")
     print(f"  X_mean: {global_stats['X_mean']}")
     print(f"  X_std: {global_stats['X_std']}")
