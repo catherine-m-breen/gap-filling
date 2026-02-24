@@ -318,6 +318,7 @@ def evaluate():
         print(f"ERROR: U-Net checkpoint not found at {unet_path}")
         return
     
+    #unet_path = '/discover/nobackup/cmbreen/gap-filling/checkpoints/attention_unet_final.pth'
     unet.load_state_dict(torch.load(unet_path, map_location=cfg.device))
     print(f"Loaded U-Net from {unet_path}")
     

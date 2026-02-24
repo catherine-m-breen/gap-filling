@@ -377,14 +377,14 @@ class ASOPatchDataset(Dataset):
             X_patch = X_patch * X_valid_mask
             Y_patch = Y_patch * Y_valid_mask
         
-        if idx == 0:  # Only print for first patch
-            print("\n=== DEBUG NORMALIZATION ===")
-            print(f"Snow class (channel 0) after normalization:")
-            print(f"  Unique values: {np.unique(X_patch[0])[: 20]}")
-            print(f"  Mean for cat channels: {X_mean[0].item()}, {X_mean[1].item()}")
-            print(f"  Std for cat channels: {X_std[0].item()}, {X_std[1].item()}")
-            print(f"  X_mean shape: {X_mean.shape}")
-            print(f"  X_std shape: {X_std.shape}")
+            if idx == 0:  # Only print for first patch
+                print("\n=== DEBUG NORMALIZATION ===")
+                print(f"Snow class (channel 0) after normalization:")
+                print(f"  Unique values: {np.unique(X_patch[0])[: 20]}")
+                print(f"  Mean for cat channels: {X_mean[0].item()}, {X_mean[1].item()}")
+                print(f"  Std for cat channels: {X_std[0].item()}, {X_std[1].item()}")
+                print(f"  X_mean shape: {X_mean.shape}")
+                print(f"  X_std shape: {X_std.shape}")
 
         # Convert to tensors
         X_tensor = torch.from_numpy(X_patch).float()
