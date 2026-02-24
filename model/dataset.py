@@ -46,8 +46,8 @@ land_class_dict = {11: "water", 12: 'perennial ice snow', 21: "Developed, open s
                     81: "Pasture/Hay", 82: "Cultivated Crops", 90: "Woody Wetlands", \
                         95: "Emergent Wetlands"}
 
-snowclass_dict = {1: "ice", 2: "tundra", 3: "boreal forest", 4: "montane forest", \
-                  5: "prairie", 6: "maritime", 7: "ephemeral"}
+snowclass_dict = {1: "tundra", 2: "boreal forest", 3: "maritime", 4: "ephemeral", \
+                  5: "praire", 6: "montane", 7: "ice"}
 
 split_basin_dict = {'train': ["Poudre River", "Big and Little Thompson", "Windy Gap",\
                              "St Vrain and Lefthand","Boulder Creek", "Clear Creek", \

@@ -10,7 +10,7 @@ from pathlib import Path
 from tqdm import tqdm
 import json
 
-from dataset import create_dataloaders, NUM_SNOW_CLASSES, SNOW_CLASSES
+from dataset import create_dataloaders
 from models import AttentionUNet, RandomForestBaseline
 
 
@@ -81,39 +81,6 @@ def compute_total_swe(swe_array, mask):
     return np.sum(swe_array[mask])
 
 
-def plot_pred_vs_target(predictions, targets, masks, save_path):
-    """Scatter plot: predicted vs actual SWE."""
-    valid_idx = masks > 0
-    
-    pred_valid = predictions[valid_idx]
-    target_valid = targets[valid_idx]
-    
-    # Subsample if too many points
-    if len(pred_valid) > 50000:
-        idx = np.random.choice(len(pred_valid), 50000, replace=False)
-        pred_valid = pred_valid[idx]
-        target_valid = target_valid[idx]
-    
-    plt.figure(figsize=(10, 10))
-    plt.hexbin(target_valid, pred_valid, gridsize=50, cmap='viridis', mincnt=1)
-    plt.colorbar(label='Pixel Count')
-    
-    # Add 1:1 line
-    min_val = min(target_valid.min(), pred_valid.min())
-    max_val = max(target_valid.max(), pred_valid.max())
-    plt.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, label='1:1 line')
-    
-    plt.xlabel('Actual SWE (mm)')
-    plt.ylabel('Predicted SWE (mm)')
-    plt.title('Predicted vs Actual SWE')
-    plt.legend()
-    plt.axis('equal')
-    plt.tight_layout()
-    plt.savefig(save_path, dpi=150)
-    plt.close()
-    
-    print(f"Saved pred vs target plot to {save_path}")
-
 # ============================================================
 # Data Collection WITH DENORMALIZATION
 # ============================================================
@@ -158,12 +125,12 @@ def collect_predictions(model, dataloader, device, model_type='unet', global_sta
             
             # Get masks from metadata (TRUE validity masks!)
             Y_mask = metadata['Y_mask'].cpu().numpy()  # (B, 1, H, W)
-            X_mask = metadata['X_mask'].cpu().numpy()  # (B, 17, H, W) ← NOW 17 CHANNELS!
+            X_mask = metadata['X_mask'].cpu().numpy()  # (B, 11, H, W) ## i think this is the bug:
             
             # Move to CPU
             pred_np = pred.cpu().numpy()      # (B, 1, H, W)
             target_np = Y.cpu().numpy()       # (B, 1, H, W)
-            X_np = X.cpu().numpy()            # (B, 17, H, W) ← NOW 17 CHANNELS!
+            X_np = X.cpu().numpy()            # (B, 11, H, W)
             
             # ========================================
             # DENORMALIZE predictions and targets
@@ -177,19 +144,19 @@ def collect_predictions(model, dataloader, device, model_type='unet', global_sta
                 target_np = target_np * Y_std + Y_mean
                 
                 # Denormalize continuous X channels
-                X_mean = global_stats['X_mean'][:, None, None, None]  # (17, 1, 1, 1)
+                X_mean = global_stats['X_mean'][:, None, None, None]  # (11, 1, 1, 1)
                 X_std = global_stats['X_std'][:, None, None, None]
                 
-                # Only denormalize continuous channels (AFTER one-hot encoding)
-                # Channels 8, 9, 10-13, 14 are continuous (canopy, elevation, 4 TBs, NDSI)
-                continuous_channels = [8, 9, 10, 11, 12, 13, 14]
+                # Only denormalize continuous channels
+                continuous_channels = [2, 3, 4, 5, 6, 7, 8]  # Based on your config
                 for c in continuous_channels:
                     X_np[:, c] = X_np[:, c] * X_std[c] + X_mean[c]
                 
-                # Categorical channels (0-6: snow one-hot, 7: land, 15-16: masks) 
-                # were "normalized" with mean=0, std=1, so they stay as-is
+                # Categorical channels (0, 1, 9, 10) were "normalized" with mean=0, std=1
+                # So they stay as-is (already original values)
             
-            # Convert SWE to mm for analysis (already in meters)
+            # Convert to mm for analysis (SWE in meters → mm)
+            # it already is in meters!
             pred_np = pred_np * 1000
             target_np = target_np * 1000
             
@@ -198,7 +165,7 @@ def collect_predictions(model, dataloader, device, model_type='unet', global_sta
             pred_flat = pred_np.reshape(B, -1)      # (B, H*W)
             target_flat = target_np.reshape(B, -1)  # (B, H*W)
             mask_flat = Y_mask.reshape(B, -1)       # (B, H*W) - boolean
-            X_flat = X_np.reshape(B, X_np.shape[1], -1)  # (B, 17, H*W)
+            X_flat = X_np.reshape(B, X_np.shape[1], -1)  # (B, 11, H*W)
             
             all_preds.append(pred_flat)
             all_targets.append(target_flat)
@@ -210,7 +177,7 @@ def collect_predictions(model, dataloader, device, model_type='unet', global_sta
     all_targets = np.concatenate(all_targets, axis=0).flatten()
     all_masks = np.concatenate(all_masks, axis=0).flatten().astype(bool)
     all_features = np.concatenate(all_features, axis=0)
-    all_features = all_features.reshape(all_features.shape[1], -1)  # (17, N_pixels)
+    all_features = all_features.reshape(all_features.shape[1], -1)  # (11, N_pixels)
     
     print(f"\nCollected {len(all_preds)} total pixels, {all_masks.sum():,} valid")
     
@@ -222,14 +189,11 @@ def collect_predictions(model, dataloader, device, model_type='unet', global_sta
         print(f"  Predictions (mm): min={valid_preds.min():.2f}, max={valid_preds.max():.2f}, mean={valid_preds.mean():.2f}")
         print(f"  Targets (mm): min={valid_targets.min():.2f}, max={valid_targets.max():.2f}, mean={valid_targets.mean():.2f}")
         
-        # Check snow one-hot encoding (channels 0-6)
-        print(f"\nSnow class distribution (one-hot encoded):")
-        for i in range(NUM_SNOW_CLASSES):
-            snow_channel = all_features[i, :]
-            valid_snow = snow_channel[all_masks]
-            active_pixels = (valid_snow > 0.5).sum()  # Count where this class is active
-            pct = 100 * active_pixels / all_masks.sum()
-            print(f"    Class {SNOW_CLASSES[i]}: {active_pixels:,} pixels ({pct:.2f}%)")
+        # Check snow class values (channel 0)
+        snow_map = all_features[0, :]
+        valid_snow = snow_map[all_masks]
+        unique_snow = np.unique(valid_snow)
+        print(f"  Snow classes (first 20): {unique_snow[:20]}")
     
     return {
         'predictions': all_preds,
@@ -264,41 +228,26 @@ def analyze_by_swe_bins(predictions, targets, masks, bins, labels):
     return pd.DataFrame(results)
 
 
-def analyze_by_snow_class(predictions, targets, masks, snow_onehot_channels):
-    """
-    Compute metrics for each snow map class.
+def analyze_by_snow_class(predictions, targets, masks, snow_map_channel):
+    """Compute metrics for each snow map class."""
+    # Round to nearest integer for categorical analysis
+    snow_map_int = np.round(snow_map_channel).astype(int)
     
-    Args:
-        predictions: Model predictions
-        targets: Ground truth
-        masks: Valid pixel mask
-        snow_onehot_channels: Array of shape (NUM_SNOW_CLASSES, N_pixels) with one-hot encoding
-    """
+    unique_classes = np.unique(snow_map_int[masks])
+    
+    # Filter out obviously invalid classes
+    # valid_classes = unique_classes[(unique_classes >= 0) & (unique_classes < 100)]
+    
     results = []
     
-    # Convert one-hot to class indices
-    # For each pixel, find which channel has the max value (argmax)
-    snow_class_idx = np.argmax(snow_onehot_channels, axis=0)  # (N_pixels,)
-    
-    # Convert indices back to original class values
-    snow_class_values = np.array([SNOW_CLASSES[i] for i in snow_class_idx])
-    
-    print(f"\nAnalyzing by snow class...")
-    print(f"Unique snow classes found: {np.unique(snow_class_values[masks])}")
-    
-    for cls_idx, cls_value in enumerate(SNOW_CLASSES):
-        # Find pixels belonging to this class
-        in_class = (snow_class_values == cls_value) & masks
+    for cls in unique_classes:
+        in_class = (snow_map_int == cls) & masks
         
         if in_class.sum() < 10:  # Skip classes with too few samples
-            print(f"  Skipping class {cls_value}: only {in_class.sum()} pixels")
             continue
         
         metrics = compute_metrics_masked(predictions, targets, in_class)
-        metrics['snow_class'] = int(cls_value)
-        metrics['snow_class_name'] = f"Class_{cls_value}"
-        
-        print(f"  Class {cls_value}: {in_class.sum():,} pixels, MAE={metrics['mae']:.2f} mm")
+        metrics['snow_class'] = int(cls)
         
         results.append(metrics)
     
@@ -376,43 +325,45 @@ def evaluate():
     test_dataset = dataloaders['test'].dataset
     global_stats = test_dataset.global_stats
     
+    print("\nGlobal stats being used for denormalization:")
+    print(f"  X_mean: {global_stats['X_mean']}")
+    print(f"  X_std: {global_stats['X_std']}")
+    print(f"  Y_mean: {global_stats['Y_mean']:.4f}")
+    print(f"  Y_std: {global_stats['Y_std']:.4f}")
+
+    # ========================================
+    # GET GLOBAL STATS from the dataset
+    # ========================================
+
     print("\n" + "="*60)
     print("GLOBAL STATS DEBUG")
     print("="*60)
-    print(f"\nX_mean for all channels (after one-hot encoding):")
-    
-    # Updated channel names for 17 channels
-    channel_names = [
-        'snow_class_0', 'snow_class_1', 'snow_class_2', 'snow_class_4', 
-        'snow_class_5', 'snow_class_6', 'snow_class_7',  # 0-6: snow one-hot
-        'landcover',     # 7
-        'canopy',        # 8
-        'elevation',     # 9
-        'TB_37H',        # 10
-        'TB_37V',        # 11
-        'TB_19H',        # 12
-        'TB_19V',        # 13
-        'NDSI',          # 14
-        'canopy_mask',   # 15
-        'snow_mask'      # 16
-    ]
-    
-    for i in range(17):
-        print(f"  Ch{i:2d} ({channel_names[i]:15s}): mean={global_stats['X_mean'][i]:10.4f}, std={global_stats['X_std'][i]:10.4f}")
+    print(f"\nX_mean for all channels:")
+    channel_names = ['snow_class', 'landcover', 'canopy', 'elevation', 
+                    'TB_37H', 'TB_37V', 'TB_19H', 'TB_19V', 
+                    'NDSI', 'forested', 'unforested']
+    for i in range(11):
+        print(f"  Ch{i} ({channel_names[i]:12s}): mean={global_stats['X_mean'][i]:10.4f}, std={global_stats['X_std'][i]:10.4f}")
 
     print(f"\nY (SWE):")
     print(f"  mean={global_stats['Y_mean']:.6f} m  ({global_stats['Y_mean']*1000:.2f} mm)")
     print(f"  std={global_stats['Y_std']:.6f} m  ({global_stats['Y_std']*1000:.2f} mm)")
 
     print("\nCategorical channels (should have mean=0, std=1):")
-    categorical = list(range(0, 7)) + [7, 15, 16]  # Snow one-hot + land + masks
+    categorical = [0, 1, 9, 10]
     for c in categorical:
-        print(f"  Ch{c:2d} ({channel_names[c]:15s}): mean={global_stats['X_mean'][c]}, std={global_stats['X_std'][c]}")
+        print(f"  Ch{c} ({channel_names[c]}): mean={global_stats['X_mean'][c]}, std={global_stats['X_std'][c]}")
 
     print("\nContinuous channels (should have real stats):")
-    continuous = [8, 9, 10, 11, 12, 13, 14]
+    continuous = [2, 3, 4, 5, 6, 7, 8]
     for c in continuous:
-        print(f"  Ch{c:2d} ({channel_names[c]:15s}): mean={global_stats['X_mean'][c]:.2f}, std={global_stats['X_std'][c]:.2f}")
+        print(f"  Ch{c} ({channel_names[c]}): mean={global_stats['X_mean'][c]:.2f}, std={global_stats['X_std'][c]:.2f}")
+
+    print("\nGlobal stats being used for denormalization:")
+    print(f"  X_mean: {global_stats['X_mean']}")
+    print(f"  X_std: {global_stats['X_std']}")
+    print(f"  Y_mean: {global_stats['Y_mean']:.4f}")
+    print(f"  Y_std: {global_stats['Y_std']:.4f}")
     
     test_loader = dataloaders['test']
     
@@ -424,7 +375,7 @@ def evaluate():
     print("Evaluating Attention U-Net")
     print("="*60)
     
-    unet = AttentionUNet(in_channels=17, out_channels=1).to(cfg.device)  # ← CHANGED from 11 to 17
+    unet = AttentionUNet(in_channels=11, out_channels=1).to(cfg.device)
     unet_path = Path(cfg.checkpoint_dir) / cfg.unet_name
     
     if not unet_path.exists():
@@ -440,15 +391,9 @@ def evaluate():
         test_loader, 
         cfg.device, 
         model_type='unet',
-        global_stats=global_stats
+        global_stats=global_stats  # ← CRITICAL: Pass this!
     )
     
-    plot_pred_vs_target(
-    unet_data['predictions'],
-    unet_data['targets'],
-    unet_data['masks'],
-    Path(cfg.results_dir) / 'unet_pred_vs_target.png')
-
     # Overall metrics
     print("\n--- Overall Metrics (U-Net) ---")
     overall_metrics = compute_metrics_masked(
@@ -470,12 +415,12 @@ def evaluate():
     print(f"Total Target SWE: {total_target:.2f} mm")
     print(f"Difference: {total_pred - total_target:.2f} mm ({100*(total_pred - total_target)/total_target:.2f}%)")
     
-    # Extract feature channels (UPDATED INDICES!)
-    CANOPY_CHANNEL = 8   # Tree canopy cover (was 2, now 8 after one-hot)
-    SNOW_ONEHOT_CHANNELS = list(range(0, NUM_SNOW_CLASSES))  # Channels 0-6
+    # Extract feature channels
+    CANOPY_CHANNEL = 2   # Tree canopy cover
+    SNOW_MAP_CHANNEL = 0  # Snow map classification
     
     canopy = unet_data['features'][CANOPY_CHANNEL, :]
-    snow_onehot = unet_data['features'][SNOW_ONEHOT_CHANNELS, :]  # (7, N_pixels)
+    snow_map = unet_data['features'][SNOW_MAP_CHANNEL, :]
     
     # --- Analysis by SWE bins ---
     print("\n--- Metrics by SWE Range (U-Net) ---")
@@ -489,13 +434,13 @@ def evaluate():
     print(swe_results.to_string(index=False))
     swe_results.to_csv(Path(cfg.results_dir) / 'unet_swe_bins.csv', index=False)
     
-    # --- Analysis by snow class (UPDATED!) ---
+    # --- Analysis by snow class ---
     print("\n--- Metrics by Snow Map Class (U-Net) ---")
     snow_results = analyze_by_snow_class(
         unet_data['predictions'],
         unet_data['targets'],
         unet_data['masks'],
-        snow_onehot  # Pass one-hot encoded channels
+        snow_map
     )
     print(snow_results.to_string(index=False))
     snow_results.to_csv(Path(cfg.results_dir) / 'unet_snow_classes.csv', index=False)
@@ -537,12 +482,13 @@ def evaluate():
         rf.load(str(rf_path))
         print(f"Loaded Random Forest from {rf_path}")
         
+        # NO model.eval() for Random Forest!
         rf_data = collect_predictions(
             rf, 
             test_loader, 
             cfg.device, 
             model_type='rf',
-            global_stats=global_stats
+            global_stats=global_stats  # ← Pass this!
         )
         
         print("\n--- Overall Metrics (Random Forest) ---")
@@ -556,20 +502,10 @@ def evaluate():
         print(f"RMSE: {rf_overall['rmse']:.2f} mm")
         print(f"MAE: {rf_overall['mae']:.2f} mm")
         
-        # Save RF results
-        rf_canopy = rf_data['features'][CANOPY_CHANNEL, :]
-        rf_snow_onehot = rf_data['features'][SNOW_ONEHOT_CHANNELS, :]
-        
-        # Analysis by snow class
-        rf_snow_results = analyze_by_snow_class(
-            rf_data['predictions'],
-            rf_data['targets'],
-            rf_data['masks'],
-            rf_snow_onehot
-        )
-        rf_snow_results.to_csv(Path(cfg.results_dir) / 'rf_snow_classes.csv', index=False)
+        # Save RF results...
+        # (add similar analysis as U-Net if needed)
     
-    print(f"\n Evaluation complete. Results saved to {cfg.results_dir}/")
+    print(f"\n✅ Evaluation complete. Results saved to {cfg.results_dir}/")
 
 
 if __name__ == "__main__":
