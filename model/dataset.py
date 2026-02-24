@@ -288,6 +288,13 @@ class ASOPatchDataset(Dataset):
         z = zarr.open(str(zarr_path), mode='r')
         X = np.array(z['X'], dtype=np.float32)
         Y = np.array(z['Y'], dtype=np.float32)
+
+        ### filter out the -9999 values ###
+        X[X == -9999] = np.nan
+        Y[Y == -9999] = np.nan
+        X[X == 9999] = np.nan   # Also catch positive nodata
+        Y[Y == 9999] = np.nan
+        ####
         _, height, width = X.shape
         
         # Random crop
