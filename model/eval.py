@@ -236,11 +236,11 @@ def analyze_by_snow_class(predictions, targets, masks, snow_map_channel):
     unique_classes = np.unique(snow_map_int[masks])
     
     # Filter out obviously invalid classes
-    valid_classes = unique_classes[(unique_classes >= 0) & (unique_classes < 100)]
+    # valid_classes = unique_classes[(unique_classes >= 0) & (unique_classes < 100)]
     
     results = []
     
-    for cls in valid_classes:
+    for cls in unique_classes:
         in_class = (snow_map_int == cls) & masks
         
         if in_class.sum() < 10:  # Skip classes with too few samples

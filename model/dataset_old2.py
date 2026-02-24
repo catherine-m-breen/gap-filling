@@ -38,7 +38,6 @@ import random
 import IPython
 
 
-
 land_class_dict = {11: "water", 12: 'perennial ice snow', 21: "Developed, open space", \
                    22: "Developed, Low Intensity", 23: "Developed: Medium Intensity", \
                     24: "Developed, High Intensity", 31: "Bare Rock/Sand/Clay", \
@@ -213,17 +212,12 @@ flight_to_basin = {
 }
 
 
-# -------------------------------
-# Snow class mapping
-# -------------------------------
-SNOW_CLASSES = [0, 1, 2, 5, 6]  # Original snow class values
-SNOW_CLASS_TO_IDX = {v: i for i, v in enumerate(SNOW_CLASSES)}  # Map to 0..4
-NUM_SNOW_CLASSES = len(SNOW_CLASSES)  # 5
-
-# -------------------------------
-# Dataset
-# -------------------------------
 class ASOPatchDataset(Dataset):
+    """
+    PyTorch Dataset for ASO SWE data stored as Zarr files.
+    Extracts patches from zarr arrays and splits by basin.
+    """
+    
     def __init__(
         self,
         zarr_dir: str,
@@ -233,8 +227,20 @@ class ASOPatchDataset(Dataset):
         normalize: bool = True,
         random_crop: bool = False,
         seed: int = 42,
+        # ADD THESE FOR PROPER NORMALIZATION:
         global_stats: Dict = None
     ):
+        """
+        Args:
+            zarr_dir: Directory containing .zarr files
+            split: 'train', 'val', or 'test'
+            patch_size: Size of square patches to extract
+            stride: Stride for sliding window
+            normalize: Whether to normalize SWE values
+            random_crop: If True, randomly sample patches
+            seed: Random seed
+            global_stats: Dict with 'X_mean', 'X_std', 'Y_mean', 'Y_std' computed from training set
+        """
         self.zarr_dir = Path(zarr_dir)
         self.split = split
         self.patch_size = patch_size
@@ -246,25 +252,36 @@ class ASOPatchDataset(Dataset):
         random.seed(seed)
         np.random.seed(seed)
         
+        # Get basins for this split
         self.basins = split_basin_dict[split]
+        
+        # Find all zarr files for this split
         self.zarr_files = self._get_zarr_files()
+        
+        # Create patch index
         self.patches = self._create_patch_index()
         
         print(f"{split.upper()} split: {len(self.zarr_files)} files, {len(self.patches)} patches")
         print(f"Basins: {self.basins}")
-
+        
     def _get_zarr_files(self) -> List[Path]:
+        """Get list of zarr files belonging to basins in this split."""
         zarr_files = []
+        
         for zarr_path in sorted(self.zarr_dir.glob("*.zarr")):
             tif_name = zarr_path.stem + '.tif'
+            
             if tif_name in flight_to_basin:
                 basin = flight_to_basin[tif_name]
                 if basin in self.basins:
                     zarr_files.append(zarr_path)
+                    
         return zarr_files
-
+    
     def _create_patch_index(self) -> List[Tuple[int, int, int]]:
+        """Create index of all patches across all files."""
         patches = []
+        
         for file_idx, zarr_path in enumerate(self.zarr_files):
             z = zarr.open(str(zarr_path), mode='r')
             X = z['X']
@@ -276,84 +293,118 @@ class ASOPatchDataset(Dataset):
                 for row in range(0, height - self.patch_size + 1, self.stride):
                     for col in range(0, width - self.patch_size + 1, self.stride):
                         patches.append((file_idx, row, col))
+        
         return patches
-
+    
     def __len__(self) -> int:
         return len(self.patches)
-
+    
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, Dict]:
+        """
+        Returns:
+            X_tensor: Features (C, H, W)
+            Y_tensor: Target SWE (1, H, W)
+            metadata: Dict with file info
+        """
         file_idx, row, col = self.patches[idx]
         zarr_path = self.zarr_files[file_idx]
         
         # Load zarr
         z = zarr.open(str(zarr_path), mode='r')
-        X = np.array(z['X'], dtype=np.float32)
-        Y = np.array(z['Y'], dtype=np.float32)
+        X = z['X']  # (11, H, W)
+        Y = z['Y']  # (1, H, W)
+        
         _, height, width = X.shape
         
-        # Random crop
+        # Random crop if enabled
         if self.random_crop or (row == -1 and col == -1):
             row = np.random.randint(0, max(1, height - self.patch_size))
             col = np.random.randint(0, max(1, width - self.patch_size))
-
+        
+        # Extract patches
         X_patch = X[:, row:row+self.patch_size, col:col+self.patch_size]
         Y_patch = Y[:, row:row+self.patch_size, col:col+self.patch_size]
-
-        # Padding for edge cases
+        
+        # Convert to numpy
+        X_patch = np.array(X_patch, dtype=np.float32)
+        Y_patch = np.array(Y_patch, dtype=np.float32)
+        
+        # Handle edge cases (padding)
         if X_patch.shape[1] < self.patch_size or X_patch.shape[2] < self.patch_size:
             X_padded = np.zeros((X_patch.shape[0], self.patch_size, self.patch_size), dtype=np.float32)
             Y_padded = np.zeros((Y_patch.shape[0], self.patch_size, self.patch_size), dtype=np.float32)
+            
             X_padded[:, :X_patch.shape[1], :X_patch.shape[2]] = X_patch
             Y_padded[:, :Y_patch.shape[1], :Y_patch.shape[2]] = Y_patch
-            X_patch, Y_patch = X_padded, Y_padded
-
-        # -----------------------
-        # Handle invalid values
-        # -----------------------
-        X_valid_mask = ~(np.isnan(X_patch) | (X_patch == -9999) | (X_patch[0] == 255) | (X_patch[1] == 250))
+            
+            X_patch = X_padded
+            Y_patch = Y_padded
+        
+        # ========================================
+        # FIX 1: PROPER HANDLING OF INVALID VALUES
+        # ========================================
+        # Create validity masks BEFORE replacing values
+        X_valid_mask = ~(np.isnan(X_patch) | (X_patch == -9999) | (X_patch == 255))  # ← Add 255
         Y_valid_mask = ~(np.isnan(Y_patch) | (Y_patch == -9999))
+        
+        # Replace invalid values with 0
         X_patch[~X_valid_mask] = 0.0
         Y_patch[~Y_valid_mask] = 0.0
-
-        # -----------------------
-        # One-hot encode snow_map (channel 0)
-        # -----------------------
-        snow_orig = X_patch[0]  # Original snow class
-        # Map original classes 0,1,2,5,6 → 0..4
-        snow_mapped = np.vectorize(SNOW_CLASS_TO_IDX.get)(snow_orig)
-        snow_onehot = np.zeros((NUM_SNOW_CLASSES, self.patch_size, self.patch_size), dtype=np.float32)
-        for i in range(NUM_SNOW_CLASSES):
-            snow_onehot[i] = (snow_mapped == i).astype(np.float32)
-
-        # Replace original snow channel with one-hot channels
-        X_patch = np.concatenate([snow_onehot, X_patch[1:]], axis=0)
-
-        # -----------------------
-        # Normalize continuous channels
-        # -----------------------
+        
+        # ========================================
+        # FIX 2: SELECTIVE NORMALIZATION
+        # ========================================
         if self.normalize and self.global_stats is not None:
-            # Continuous: [canopy_cover(2), elevation(3), brightness 4-7, ndsi(8)]
-            # NOTE: after adding snow one-hot, channel indices shift by NUM_SNOW_CLASSES-1
-            shift = NUM_SNOW_CLASSES - 1
-            continuous_channels = np.array([2, 3, 4, 5, 6, 7, 8]) + shift
-            X_mean = self.global_stats['X_mean'][:, None, None]
+            # Define which channels are continuous (to normalize)
+            # Based on your channel order:
+            # 0: snow_class (categorical - DON'T normalize)
+            # 1: landcover (categorical - DON'T normalize)
+            # 2: canopy_cover (continuous? - could go either way)
+            # 3: elevation (continuous - normalize)
+            # 4-7: brightness temps (continuous - normalize)
+            # 8: NDSI (continuous - normalize)
+            # 9-10: forest masks (binary - DON'T normalize)
+            
+            continuous_channels = [2, 3, 4, 5, 6, 7, 8]  # Tree cover, Elevation, TBs, NDSI
+            categorical_channels = [0, 1, 9, 10]   # Snow, land, forested and unforested masks
+            
+            X_mean = self.global_stats['X_mean'][:, None, None]  # (11, 1, 1)
             X_std = self.global_stats['X_std'][:, None, None]
+            Y_mean = self.global_stats['Y_mean']
+            Y_std = self.global_stats['Y_std']
+            
+            # Only normalize continuous channels
+            ### NORMALIZING THE CONTINUOUS CHANNELS ONLY
             for c in continuous_channels:
-                X_patch[c] = (X_patch[c] - X_mean[c]) / (X_std[c] + 1e-8)
+                X_patch[c] = (X_patch[c] - X_mean[c]) / (X_std[c]+ 1e-8)
             
-            # Normalize target SWE
-            Y_patch = (Y_patch - self.global_stats['Y_mean']) / (self.global_stats['Y_std'] + 1e-8)
+            # Categorical channels stay as-is (no normalization)
+            # They're already in reasonable ranges
             
-            # Zero invalid locations
-            X_patch *= X_valid_mask
-            Y_patch *= Y_valid_mask
+            # Normalize target (SWE is continuous)
+            Y_patch = (Y_patch - Y_mean) / (Y_std + 1e-8)
+            
+            # Re-zero invalid locations after normalization
+            X_patch = X_patch * X_valid_mask
+            Y_patch = Y_patch * Y_valid_mask
+        
+            if idx == 0:  # Only print for first patch
+                print("\n=== DEBUG NORMALIZATION ===")
+                print(f"Snow class (channel 0) after normalization:")
+                print(f"  Unique values: {np.unique(X_patch[0])[: 20]}")
+                print(f"  Mean for cat channels: {X_mean[0].item()}, {X_mean[1].item()}")
+                print(f"  Std for cat channels: {X_std[0].item()}, {X_std[1].item()}")
+                print(f"  X_mean shape: {X_mean.shape}")
+                print(f"  X_std shape: {X_std.shape}")
 
         # Convert to tensors
         X_tensor = torch.from_numpy(X_patch).float()
         Y_tensor = torch.from_numpy(Y_patch).float()
-
+        
+        # Get metadata
         tif_name = zarr_path.stem + '.tif'
         basin = flight_to_basin.get(tif_name, 'Unknown')
+        
         metadata = {
             'file': zarr_path.name,
             'basin': basin,
@@ -364,7 +415,7 @@ class ASOPatchDataset(Dataset):
             'X_mask': torch.from_numpy(X_valid_mask).float(),
             'Y_mask': torch.from_numpy(Y_valid_mask).float()
         }
-
+        
         return X_tensor, Y_tensor, metadata
 
 # ========================================
