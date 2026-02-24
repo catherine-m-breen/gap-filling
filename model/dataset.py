@@ -317,7 +317,10 @@ class ASOPatchDataset(Dataset):
         # Handle invalid values (BEFORE one-hot encoding)
         # -----------------------
         X_valid_mask_orig = ~(np.isnan(X_patch) | (X_patch == -9999) | (X_patch[0] == 255) | (X_patch[1] == 250))
-        Y_valid_mask = ~(np.isnan(Y_patch) | (Y_patch == -9999))
+
+        ## catch any other weird values for now: 
+        Y_valid_mask = ~(np.isnan(Y_patch) | (Y_patch == -9999)) | (Y_patch < -0.01) | (Y_patch > 10.0) 
+
         X_patch[~X_valid_mask_orig] = 0.0
         Y_patch[~Y_valid_mask] = 0.0
 
@@ -433,6 +436,13 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
         X, Y, metadata = temp_dataset[i]
         X = X.numpy()
         Y = Y.numpy()
+
+        #### more aggressive -9999 handling ###
+        X[X == -9999] = np.nan
+        Y[Y == -9999] = np.nan
+        X[X == 9999] = np.nan
+        Y[Y == 9999] = np.nan
+        ####
 
         X_mask = metadata['X_mask'].numpy().astype(bool)
         Y_mask = metadata['Y_mask'].numpy().astype(bool)
