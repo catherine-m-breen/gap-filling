@@ -9,29 +9,33 @@
 TIF_DIR="/Volumes/MyBook/aso_data/swe_tifs/colorado/**/"
 
 ## The ones that are missing
-TIFS=(
-    "ASO_BlueRiver_Mosaic_2019June24-28_swe_50m.tif"
-    "ASO_TenMileCk_2019June13-25_swe_50m.tif"
-    "ASO_WindyGap_2023Apr16_swe_50m.tif"
-    "ASO_WindyGap_2023May27_swe_50m.tif"
-    "ASO_WindyGap_2024Apr14_swe_50m.tif"
-    "ASO_WindyGap_2024Mar21-22_swe_50m.tif"
-    "ASO_WindyGap_2024May30_swe_50m.tif"
-    "ASO_WindyGap_2025Apr07_swe_50m.tif"
-    "ASO_WindyGap_2025Apr29_swe_50m.tif"
-    "ASO_WindyGap_2025May31_swe_50m.tif"
-    "ASO_WindyGap_Mosaic_2022Apr18_swe_50m.tif"
-    "ASO_YampaRiver_2024Apr11_swe_50m.tif"
-    "ASO_YampaRiver_2024May27-28_swe_50m.tif"
-    "ASO_YampaRiver_2025Apr11_swe_50m.tif"
-    "ASO_YampaRiver_2025May22-24_swe_50m.tif"
-)
+# TIFS=(
+#     "ASO_BlueRiver_Mosaic_2019June24-28_swe_50m.tif"
+#     "ASO_TenMileCk_2019June13-25_swe_50m.tif"
+#     "ASO_WindyGap_2023Apr16_swe_50m.tif"
+#     "ASO_WindyGap_2023May27_swe_50m.tif"
+#     "ASO_WindyGap_2024Apr14_swe_50m.tif"
+#     "ASO_WindyGap_2024Mar21-22_swe_50m.tif"
+#     "ASO_WindyGap_2024May30_swe_50m.tif"
+#     "ASO_WindyGap_2025Apr07_swe_50m.tif"
+#     "ASO_WindyGap_2025Apr29_swe_50m.tif"
+#     "ASO_WindyGap_2025May31_swe_50m.tif"
+#     "ASO_WindyGap_Mosaic_2022Apr18_swe_50m.tif"
+#     "ASO_YampaRiver_2024Apr11_swe_50m.tif"
+#     "ASO_YampaRiver_2024May27-28_swe_50m.tif"
+#     "ASO_YampaRiver_2025Apr11_swe_50m.tif"
+#     "ASO_YampaRiver_2025May22-24_swe_50m.tif"
+# )
+
+TIFS=("ASO_GunnisonNorth_2025Mar27_swe_50m")
 
 # Base output directory for downloaded data
-BASE_OUTPUT_DIR="/discover/nobackup/cmbreen/gap-filling-data/passive_microwave/nsidc_pm_data"
+BASE_OUTPUT_DIR="/Volumes/MyBook"
+#"/discover/nobackup/cmbreen/gap-filling-data/passive_microwave/nsidc_pm_data"
 
 # Filter for specific channels (adjust as needed)
-FILTER="*_N3.125km_F18_SSMIS_E_37H_*,*_N3.125km_F18_SSMIS_E_37V_*,*_N6.25km_F18_SSMIS_E_19H_*,*_N6.25km_F18_SSMIS_E_19V_*"
+FILTER="*_N3.125km_F18_SSMIS_E_37H_*"
+#,*_N3.125km_F18_SSMIS_E_37V_*,*_N6.25km_F18_SSMIS_E_19H_*,*_N6.25km_F18_SSMIS_E_19V_*"
 
 # Function to extract date from filename
 extract_date() {

@@ -8,10 +8,10 @@
 TIF_DIR="/Volumes/MyBook/aso_data/swe_tifs/colorado"
 
 ## The ones that are missing
-TIFS=(
-    "ASO_BlueRiver_Mosaic_2019June24-28_swe_50m.tif"
-    "ASO_TenMileCk_2019June13-25_swe_50m.tif"
-)
+# TIFS=(
+#     "ASO_BlueRiver_Mosaic_2019June24-28_swe_50m.tif"
+#     "ASO_TenMileCk_2019June13-25_swe_50m.tif"
+# )
 
     # "ASO_WindyGap_2023Apr16_swe_50m.tif"
     # "ASO_WindyGap_2023May27_swe_50m.tif"
@@ -27,9 +27,12 @@ TIFS=(
     # "ASO_YampaRiver_2025Apr11_swe_50m.tif"
     # "ASO_YampaRiver_2025May22-24_swe_50m.tif"
 
+
+TIFS=("ASO_GunnisonNorth_2025Mar27_swe_50m.tif")
+
 # Base output directory for downloaded data
 #BASE_OUTPUT_DIR="/discover/nobackup/cmbreen/gap-filling-data/passive_microwave/nsidc_pm_data"
-BASE_OUTPUT_DIR="/Volumes/MyBook/passive_microwave"
+BASE_OUTPUT_DIR="/Volumes/MyBook"
 
 
 # Filter for specific channels (adjust as needed)
