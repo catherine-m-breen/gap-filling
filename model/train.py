@@ -40,7 +40,7 @@ def compute_metrics(pred, target):
 
 # Training
 
-def masked_loss(predictions, targets, mask, loss_fn= nn.MSELoss(reduction='none'), global_stats=None): #nn.L1Loss(reduction='none')):
+def masked_loss(predictions, targets, mask, global_stats=None): #nn.L1Loss(reduction='none')):
     ## we are only computing the loss on the valid Y pixels 
     """Compute loss only on Y valid pixels."""
 
