@@ -176,8 +176,13 @@ def collect_predictions(model, dataloader, device, model_type='unet', global_sta
                 # Denormalize Y: y_original = y_normalized * std + mean
                 pred_np = pred_np * Y_std + Y_mean
                 target_np = target_np * Y_std + Y_mean
+
+                # de log (first we logged then normalizeso we will do the opposite )
+                # pred_np = np.expm1(pred_np)      # Now in meters
+                # target_np = np.expm1(target_np)  # Now in meters
                 
                 # Denormalize continuous X channels
+                ## don't need to de-log because we ddidn't log the X variables, only the target. 
                 X_mean = global_stats['X_mean'][:, None, None, None]  # (17, 1, 1, 1)
                 X_std = global_stats['X_std'][:, None, None, None]
                 
@@ -187,11 +192,10 @@ def collect_predictions(model, dataloader, device, model_type='unet', global_sta
                 for c in continuous_channels:
                     X_np[:, c] = X_np[:, c] * X_std[c] + X_mean[c]
                 
-                # Categorical channels (0-6: snow one-hot, 7: land, 15-16: masks) 
-                # were "normalized" with mean=0, std=1, so they stay as-is
+            #     Categorical channels (0-6: snow one-hot, 7: land, 15-16: masks) 
+            #     were "normalized" with mean=0, std=1, so they stay as-is
             
             # Convert SWE to mm for analysis (already in meters)
-            pred_np = np.expm1(pred_np)
             pred_np = pred_np * 1000
             target_np = target_np * 1000
             
@@ -210,7 +214,7 @@ def collect_predictions(model, dataloader, device, model_type='unet', global_sta
     # Concatenate all batches
     all_preds = np.concatenate(all_preds, axis=0).flatten()
     all_targets = np.concatenate(all_targets, axis=0).flatten()
-    all_masks = np.concatenate(all_masks, axis=0).flatten().astype(bool)
+    all_masks = np.concatenate(all_masks, axis=0).flatten().astype(bool) ## just masking out the Y invalid pixels 
     all_features = np.concatenate(all_features, axis=0)
     all_features = all_features.reshape(all_features.shape[1], -1)  # (17, N_pixels)
     
@@ -427,6 +431,7 @@ def evaluate():
     print("="*60)
     
     #unet = AttentionUNet(in_channels=17, out_channels=1).to(cfg.device)  # ← CHANGED from 11 to 17
+    unet_path = '/discover/nobackup/cmbreen/gap-filling/checkpoints/attention_unet_final.pth'
     unet  = ToyModel(in_channels=17).to(cfg.device)
     unet_path = Path(cfg.checkpoint_dir) / cfg.unet_name
     

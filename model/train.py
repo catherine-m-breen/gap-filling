@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import zarr
 from models import AttentionUNet, RandomForestBaseline, ToyModel
-
+#from dataset import global_stats 
 
 # Config
 
@@ -40,12 +40,45 @@ def compute_metrics(pred, target):
 
 # Training
 
-def masked_loss(predictions, targets, mask, loss_fn= nn.MSELoss(reduction='none')): #nn.L1Loss(reduction='none')):
-    """Compute loss only on valid pixels."""
-    element_loss = loss_fn(predictions, targets)
-    masked_loss_vals = element_loss * mask
+def masked_loss(predictions, targets, mask, loss_fn= nn.MSELoss(reduction='none'), global_stats): #nn.L1Loss(reduction='none')):
+    ## we are only computing the loss on the valid Y pixels 
+    """Compute loss only on Y valid pixels."""
+
+    ### new code to weight the larger swe values ###
+    squared_error = (predictions - targets) ** 2 
+    # This would be the max for each batch
+    #max_target = torch.max(torch.abs(targets[mask > 0])) + 1e-8 ## weighs the larger pixel in the patch 
+
+    ### this is the global Mean/Max
+    Y_mean = global_stats['Y_mean']
+    Y_std = global_stats['Y_std']
+    Y_max_meters = global_stats['Y_max']
+    Y_max_normalized = (Y_max_meters - Y_mean) / (Y_std + 1e-8)
+    # targets_denorm = targets * Y_std + Y_mean  # Back to meters
+
+    # ## because the global i
+    # targets_denorm = targets * Y_std + Y_mean  # log-space
+    # targets_denorm = torch.expm1(targets_denorm)  # meters
+    # Use GLOBAL max (converted to tensor)
+    global_max = torch.tensor(Y_max_normalized, device=targets.device, dtype=targets.dtype)
+    
+    # Linear weighting: weight = 1 + (target / global_max)
+    # 0m SWE → weight = 1.0
+    # max SWE (e.g., 2m) → weight = 2.0
+    weights = 1.0 + (torch.abs(targets) / (global_max + 1e-8))
+
+    # element_loss = loss_fn(predictions, targets)
+    # masked_loss_vals = element_loss * mask
+    # num_valid = mask.sum() + 1e-8
+    # return masked_loss_vals.sum() / num_valid
+
+    weights = 1.0 + (torch.abs(targets) / (torch.abs(global_max) + 1e-8))
+    
+    # Apply weights and mask
+    weighted_error = squared_error * weights * mask
+    
     num_valid = mask.sum() + 1e-8
-    return masked_loss_vals.sum() / num_valid
+    return weighted_error.sum() / num_valid
 
 def train():
 
@@ -66,6 +99,8 @@ def train():
     )
 
     # 1. Train Attention U-Net
+    train_dataset = dataloaders['train'].dataset
+    global_stats = train_dataset.global_stats
 
     print("Training Attention U-Net")
 
@@ -94,13 +129,16 @@ def train():
         model.train()
         train_loss = 0.0
 
-        for X, Y, _ in tqdm(dataloaders['train']):
+        for X, Y, metadata in tqdm(dataloaders['train']):
+
             X = X.to(cfg.device)
             Y = Y.to(cfg.device)
 
             optimizer.zero_grad()
             outputs = model(X)
-            loss = criterion(outputs, Y)
+            #loss = criterion(outputs, Y)
+            Y_mask = metadata['Y_mask'].to(cfg.device)
+            loss = masked_loss(outputs, Y, Y_mask, global_stats)
             loss.backward()
             optimizer.step()
 
@@ -122,10 +160,11 @@ def train():
                 X = X.to(cfg.device)
                 Y = Y.to(cfg.device)
                 Y_mask = metadata['Y_mask'].to(cfg.device)
+                #global_stats = dataloaders['val'].global_stats
 
                 outputs = model(X)
                 #loss = criterion(outputs, Y)
-                loss = masked_loss(outputs, Y, Y_mask)  # ← Use masked loss!
+                loss = masked_loss(outputs, Y, Y_mask, global_stats)  # ← Use masked loss!
 
                 mae, rmse = compute_metrics(outputs, Y)
 

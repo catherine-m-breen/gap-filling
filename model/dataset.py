@@ -315,11 +315,11 @@ class ASOPatchDataset(Dataset):
         X_valid_mask_orig = ~(np.isnan(X_patch) | (X_patch == -9999) | (X_patch[0] == 255) | (X_patch[1] == 250))
 
         ## catch any other weird values for now: 
-        Y_valid_mask = ~(np.isnan(Y_patch) |   (Y_patch == -9999) |  (Y_patch < -0.01) |  (Y_patch > 10.0)) # |  (Y_patch < 0))
-        #Y_valid_mask = (~np.isnan(Y_patch) & (Y_patch != -9999) & (Y_patch > 0) & (Y_patch <= 10.0)         # Reasonable upper bound (10 meters)
+        #Y_valid_mask = ~(np.isnan(Y_patch) |   (Y_patch == -9999) |  (Y_patch < -0.01) |  (Y_patch > 10.0)) # |  (Y_patch < 0))
+        Y_valid_mask = (~np.isnan(Y_patch) & (Y_patch != -9999) & (Y_patch >= 0) & (Y_patch <= 10.0))         # Reasonable upper bound (10 meters and no negative values
 
         ####### TRY LOG TRANSFORMING THE TARGET TO SEE IF WE CAN EXPAND THE RANGE ##
-        Y_patch = np.log1p(Y_patch)  # log(1 + Y)
+        #Y_patch = np.log1p(Y_patch)  # log(1 + Y)
 
         X_patch[~X_valid_mask_orig] = 0.0
         Y_patch[~Y_valid_mask] = 0.0
@@ -430,6 +430,7 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
     Y_sum = 0.0
     Y_sq_sum = 0.0
     Y_count = 0
+    Y_max = 0 
     
     print("Scanning all patches...")
     for i in range(len(temp_dataset)):
@@ -445,9 +446,9 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
         ####
 
         ### put in log transform for the stats ### 
-        Y = np.log1p(Y)
+        #Y = np.log1p(Y)
         #### 
-        
+
         X_mask = metadata['X_mask'].numpy().astype(bool)
         Y_mask = metadata['Y_mask'].numpy().astype(bool)
         
@@ -465,6 +466,7 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
         Y_sum += Y_valid_values.sum()
         Y_sq_sum += (Y_valid_values ** 2).sum()
         Y_count += Y_valid_values.size
+        Y_max = np.max(Y_valid_values) if Y_max < np.max(Y_valid_values) else Y_max
                     
         if (i + 1) % 100 == 0:
             print(f"  Processed {i+1}/{len(temp_dataset)} patches")
@@ -490,6 +492,7 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
     Y_var = (Y_sq_sum / (Y_count)) - (Y_mean ** 2) # + 1e-8
     Y_std = np.sqrt(np.maximum(Y_var, 0))
     
+    
     print("\nGlobal Statistics:")
     print(f"Continuous channels {continuous_channels}:")
     print(f"  X mean: {X_mean[continuous_channels]}")
@@ -506,7 +509,8 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
         'X_mean': X_mean,
         'X_std': X_std,
         'Y_mean': Y_mean,
-        'Y_std': Y_std
+        'Y_std': Y_std,
+        'Y_max': Y_max
     }
 
 
