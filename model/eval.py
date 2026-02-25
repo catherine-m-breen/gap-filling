@@ -50,6 +50,7 @@ class EvalConfig:
 def compute_metrics_masked(pred, target, mask):
     """
     Compute metrics only on valid (non-masked) pixels.
+    Where are the masks coming from? 
     """
     pred_valid = pred[mask]
     target_valid = target[mask]

@@ -24,7 +24,7 @@ class Config:
     normalize = True
     random_crop_train = False
 
-    epochs = 20
+    epochs = 10
     lr = 1e-3
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -48,7 +48,7 @@ def compute_metrics(pred, target):
 # Training
 # ============================================================
 
-def masked_loss(predictions, targets, mask, loss_fn=nn.L1Loss(reduction='none')):
+def masked_loss(predictions, targets, mask, loss_fn= nn.MSELoss(reduction='none')): #nn.L1Loss(reduction='none')):
     """Compute loss only on valid pixels."""
     element_loss = loss_fn(predictions, targets)
     masked_loss_vals = element_loss * mask

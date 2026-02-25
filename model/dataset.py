@@ -394,7 +394,7 @@ class ASOPatchDataset(Dataset):
 def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
     """
     Creates a dictionary with the mean/std for each variable to properly normalize in the dataset. 
-    
+
     Compute global mean/std from the training set for proper normalization.
     Only computes stats for continuous features AFTER one-hot encoding.
     """
@@ -484,8 +484,8 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
         X_std[c] = 1.0
     
     # Target (SWE)
-    Y_mean = Y_sum / (Y_count + 1e-8)
-    Y_var = (Y_sq_sum / (Y_count + 1e-8)) - (Y_mean ** 2)
+    Y_mean = Y_sum / (Y_count) # + 1e-8
+    Y_var = (Y_sq_sum / (Y_count)) - (Y_mean ** 2) # + 1e-8
     Y_std = np.sqrt(np.maximum(Y_var, 0))
     
     print("\nGlobal Statistics:")
