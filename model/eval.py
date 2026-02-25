@@ -196,8 +196,8 @@ def collect_predictions(model, dataloader, device, model_type='unet', global_sta
             #     were "normalized" with mean=0, std=1, so they stay as-is
             
             # Convert SWE to mm for analysis (already in meters)
-            pred_np = pred_np * 1000
-            target_np = target_np * 1000
+            pred_np = pred_np #* 1000
+            target_np = target_np #* 1000
             
             # Flatten spatial dimensions
             B, C, H, W = pred_np.shape

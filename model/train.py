@@ -22,7 +22,7 @@ class Config:
     normalize = True
     random_crop_train = False
 
-    epochs = 10
+    epochs = 5
     lr = 1e-3
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -65,14 +65,15 @@ def masked_loss(predictions, targets, mask, global_stats=None): #nn.L1Loss(reduc
     # Linear weighting: weight = 1 + (target / global_max)
     # 0m SWE → weight = 1.0
     # max SWE (e.g., 2m) → weight = 2.0
-    weights = 1.0 + (torch.abs(targets) / (global_max + 1e-8))
+    #weights = 1.0 + (torch.abs(targets) / (global_max + 1e-8))
 
     # element_loss = loss_fn(predictions, targets)
     # masked_loss_vals = element_loss * mask
     # num_valid = mask.sum() + 1e-8
     # return masked_loss_vals.sum() / num_valid
 
-    weights = 1.0 + (torch.abs(targets) / (torch.abs(global_max) + 1e-8))
+    #weights = 1.0 + (torch.abs(targets) / (torch.abs(global_max) + 1e-8))
+    weights = torch.exp(targets / global_max)
     
     # Apply weights and mask
     weighted_error = squared_error * weights * mask
@@ -144,9 +145,18 @@ def train():
 
             train_loss += loss.item()
 
+            valid_pixels = Y_mask.sum().item()
+            total_pixels = Y_mask.numel()
+            print("Valid pixel fraction:", valid_pixels / total_pixels)
+            print("Outputs std:", outputs.std().item())
+            print("Targets std (valid):", Y[Y_mask > 0].std().item())
+            print("Mask fraction:", Y_mask.mean().item())
+
         train_loss /= len(dataloaders['train'])
         train_losses.append(train_loss)
         print(f"Train L1: {train_loss:.6f}")
+
+
 
         # Validation
 
