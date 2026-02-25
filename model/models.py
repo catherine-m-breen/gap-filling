@@ -127,7 +127,8 @@ class AttentionUNet(nn.Module):
         d1 = torch.cat([d1, e1_att], dim=1)
         d1 = self.dec1(d1)
 
-        out = torch.sigmoid(self.final(d1))
+        #out = torch.sigmoid(self.final(d1))
+        out = self.final(d1)
 
         if self.return_attention:
             return out, {
