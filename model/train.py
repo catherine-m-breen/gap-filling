@@ -189,8 +189,8 @@ def train():
             valid_pixels = Y_mask.sum().item()
             total_pixels = Y_mask.numel()
             print("Valid pixel fraction:", valid_pixels / total_pixels)
-            print("Outputs std:", outputs.std().item())
-            print("Targets std (valid):", Y[Y_mask > 0].std().item())
+            # print("Outputs std:", outputs.std().item())
+            # print("Targets std (valid):", Y[Y_mask > 0].std().item())
             print("Mask fraction:", Y_mask.mean().item())
 
         train_loss /= len(dataloaders['train'])

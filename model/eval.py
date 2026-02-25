@@ -35,7 +35,7 @@ class EvalConfig:
     results_dir = "./results"
     
     # SWE bins for analysis (in mm, AFTER denormalization)
-    swe_bins = [0, 100, 300, 600, 1000]
+    swe_bins = [0, 1, 3, 6, 10]
     swe_labels = ['Low (0-100mm)', 'Medium (100-300mm)', 'High (300-600mm)', 'Very High (>600mm)']
     
     # Tree canopy bins (%)
