@@ -393,6 +393,8 @@ class ASOPatchDataset(Dataset):
 # ========================================
 def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
     """
+    Creates a dictionary with the mean/std for each variable to properly normalize in the dataset. 
+    
     Compute global mean/std from the training set for proper normalization.
     Only computes stats for continuous features AFTER one-hot encoding.
     """
@@ -402,7 +404,7 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
     temp_dataset = ASOPatchDataset(
         zarr_dir=zarr_dir,
         split=split,
-        normalize=False,
+        normalize=False, ## why is this false?
         random_crop=False
     )
     
@@ -413,14 +415,14 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
     # [9]: elevation (continuous)
     # [10-13]: brightness bands (continuous, 4 bands)
     # [14]: ndsi (continuous)
-    # [15]: canopy_mask (categorical)
-    # [16]: snow_mask (categorical)
+    # [15]: forested mask (categorical)
+    # [16]: unforested mask (categorical)
     
     NUM_CHANNELS = NUM_SNOW_CLASSES + 10  # 7 + 10 = 17
     
     # Define which channels are continuous (AFTER one-hot encoding)
     continuous_channels = [8, 9, 10, 11, 12, 13, 14]  # canopy_cover, elevation, 4 TBs, NDSI
-    categorical_channels = list(range(0, 7)) + [7, 15, 16]  # Snow one-hot, land, masks
+    categorical_channels = list(range(0, 7)) + [7, 15, 16]  # Snow one-hot, land, f/unf masks
     
     # Accumulate statistics
     X_sum = np.zeros(NUM_CHANNELS, dtype=np.float64)

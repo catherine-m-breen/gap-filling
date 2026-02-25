@@ -8,7 +8,7 @@ from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 import zarr
-from models import AttentionUNet, RandomForestBaseline
+from models import AttentionUNet, RandomForestBaseline, ToyModel
 
 
 # ============================================================
@@ -81,7 +81,10 @@ def train():
     print("Training Attention U-Net")
     print("==============================")
 
-    model = AttentionUNet(in_channels=17, out_channels=1).to(cfg.device)
+    model = ToyModel(in_channels=17).to(cfg.device)
+    # Train this
+
+    #AttentionUNet(in_channels=17, out_channels=1).to(cfg.device)
     criterion = nn.L1Loss()   # Better for SWE / regression problems
     optimizer = optim.Adam(model.parameters(), lr=cfg.lr)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
@@ -221,6 +224,14 @@ def train():
     for i, score in enumerate(importance):
         print(f"Channel {i}: {score:.4f}")
 
+    # debug_results = debug_model_output(
+    #     model=model,
+    #     dataloader=dataloaders['val'],  # Check on validation set
+    #     device=cfg.device,
+    #     global_stats=global_stats
+    # )
+
+
 
 def check_zarr_validity(zarr_dir: str):
     """Check all zarr files for invalid target values."""
@@ -247,9 +258,71 @@ def check_zarr_validity(zarr_dir: str):
             print(f"   Min: {np.nanmin(Y):.2f}m, Max: {np.nanmax(Y):.2f}m")
             print(f"   Mean: {np.nanmean(Y[~np.isnan(Y)]):.2f}m")
 
+
+def debug_model_output(model, dataloader, device, global_stats):
+    """Comprehensive debugging of model behavior."""
+    model.eval()
+    
+    all_preds_norm = []
+    all_targets_norm = []
+    
+    with torch.no_grad():
+        for i, batch in enumerate(dataloader):
+            if i >= 5:  # Just check first 5 batches
+                break
+                
+            X, Y, metadata = batch
+            X = X.to(device)
+            mask = metadata['Y_mask']
+            
+            pred = model(X).cpu()
+            
+            all_preds_norm.append(pred[mask > 0])
+            all_targets_norm.append(Y[mask > 0])
+    
+    all_preds_norm = torch.cat(all_preds_norm)
+    all_targets_norm = torch.cat(all_targets_norm)
+    
+    # Denormalize
+    pred_denorm = all_preds_norm.numpy() * global_stats['Y_std'] + global_stats['Y_mean']
+    target_denorm = all_targets_norm.numpy() * global_stats['Y_std'] + global_stats['Y_mean']
+    
+    print("\n" + "="*60)
+    print("MODEL OUTPUT DIAGNOSTIC")
+    print("="*60)
+    
+    print("\nNORMALIZED (what model sees):")
+    print(f"  Predictions: mean={all_preds_norm.mean():.4f}, std={all_preds_norm.std():.4f}")
+    print(f"               min={all_preds_norm.min():.4f}, max={all_preds_norm.max():.4f}")
+    print(f"  Targets:     mean={all_targets_norm.mean():.4f}, std={all_targets_norm.std():.4f}")
+    print(f"               min={all_targets_norm.min():.4f}, max={all_targets_norm.max():.4f}")
+    print(f"  Variance Ratio: {all_preds_norm.std() / (all_targets_norm.std() + 1e-8):.4f}")
+    
+    print("\nDENORMALIZED (real SWE in meters):")
+    print(f"  Predictions: mean={pred_denorm.mean():.4f}m, std={pred_denorm.std():.4f}m")
+    print(f"               min={pred_denorm.min():.4f}m, max={pred_denorm.max():.4f}m")
+    print(f"  Targets:     mean={target_denorm.mean():.4f}m, std={target_denorm.std():.4f}m")
+    print(f"               min={target_denorm.min():.4f}m, max={target_denorm.max():.4f}m")
+    print(f"  Variance Ratio: {pred_denorm.std() / (target_denorm.std() + 1e-8):.4f}")
+    
+    print("\nGLOBAL STATS USED:")
+    print(f"  Y_mean: {global_stats['Y_mean']:.4f}")
+    print(f"  Y_std:  {global_stats['Y_std']:.4f}")
+    
+    print("="*60 + "\n")
+    
+    return {
+        'pred_norm': all_preds_norm,
+        'target_norm': all_targets_norm,
+        'pred_denorm': pred_denorm,
+        'target_denorm': target_denorm
+    }
+
+
 if __name__ == "__main__":
     
     # Run this before training
         zarr_dir = "/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks"
         check_zarr_validity(zarr_dir)
         train()
+   

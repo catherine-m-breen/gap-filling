@@ -128,6 +128,7 @@ class AttentionUNet(nn.Module):
         d1 = self.dec1(d1)
 
         #out = torch.sigmoid(self.final(d1))
+        ## we DON'T want a sigmoid because this is not a classification problem but a regression problem
         out = self.final(d1)
 
         if self.return_attention:
@@ -202,3 +203,21 @@ class RandomForestBaseline:
 
     def load(self, path):
         self.model = joblib.load(path)
+
+
+    ########## TOY MODEL ##########
+
+class ToyModel(nn.Module):
+    """Simple model that SHOULD capture variance."""
+    def __init__(self, in_channels=17):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv2d(in_channels, 64, 3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, 3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 1, 1)  # No activation!
+        )
+    
+    def forward(self, x):
+        return self.net(x)
