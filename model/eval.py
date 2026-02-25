@@ -11,7 +11,7 @@ from tqdm import tqdm
 import json
 
 from dataset import create_dataloaders, NUM_SNOW_CLASSES, SNOW_CLASSES
-from models import AttentionUNet, RandomForestBaseline
+from models import AttentionUNet, RandomForestBaseline, ToyModel
 
 
 # ============================================================
@@ -424,7 +424,8 @@ def evaluate():
     print("Evaluating Attention U-Net")
     print("="*60)
     
-    unet = AttentionUNet(in_channels=17, out_channels=1).to(cfg.device)  # ← CHANGED from 11 to 17
+    #unet = AttentionUNet(in_channels=17, out_channels=1).to(cfg.device)  # ← CHANGED from 11 to 17
+    unet  = ToyModel(in_channels=17).to(cfg.device)
     unet_path = Path(cfg.checkpoint_dir) / cfg.unet_name
     
     if not unet_path.exists():
