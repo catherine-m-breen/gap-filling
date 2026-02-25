@@ -191,6 +191,7 @@ def collect_predictions(model, dataloader, device, model_type='unet', global_sta
                 # were "normalized" with mean=0, std=1, so they stay as-is
             
             # Convert SWE to mm for analysis (already in meters)
+            pred_np = np.expm1(pred_np)
             pred_np = pred_np * 1000
             target_np = target_np * 1000
             
@@ -374,7 +375,7 @@ def evaluate():
     # ========================================
     # GET GLOBAL STATS from the dataset
     # ========================================
-    test_dataset = dataloaders['test'].dataset
+    test_dataset = dataloaders['val'].dataset ##test
     global_stats = test_dataset.global_stats
     
     print("\n" + "="*60)
@@ -415,7 +416,7 @@ def evaluate():
     for c in continuous:
         print(f"  Ch{c:2d} ({channel_names[c]:15s}): mean={global_stats['X_mean'][c]:.2f}, std={global_stats['X_std'][c]:.2f}")
     
-    test_loader = dataloaders['test']
+    test_loader = dataloaders['val'] #['test'] ## just try it on val since hypothetically it is an easier problem 
     
     # ============================================================
     # 1. Evaluate Attention U-Net

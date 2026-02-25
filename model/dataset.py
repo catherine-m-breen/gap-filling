@@ -315,9 +315,11 @@ class ASOPatchDataset(Dataset):
         X_valid_mask_orig = ~(np.isnan(X_patch) | (X_patch == -9999) | (X_patch[0] == 255) | (X_patch[1] == 250))
 
         ## catch any other weird values for now: 
-        #Y_valid_mask = ~(np.isnan(Y_patch) |   (Y_patch == -9999) |  (Y_patch < -0.01) |  (Y_patch > 10.0) |  (Y_patch < 0))
-        Y_valid_mask = (~np.isnan(Y_patch) & (Y_patch != -9999) & (Y_patch > 0) & (Y_patch <= 10.0)         # Reasonable upper bound (10 meters)
-)
+        Y_valid_mask = ~(np.isnan(Y_patch) |   (Y_patch == -9999) |  (Y_patch < -0.01) |  (Y_patch > 10.0)) # |  (Y_patch < 0))
+        #Y_valid_mask = (~np.isnan(Y_patch) & (Y_patch != -9999) & (Y_patch > 0) & (Y_patch <= 10.0)         # Reasonable upper bound (10 meters)
+
+        ####### TRY LOG TRANSFORMING THE TARGET TO SEE IF WE CAN EXPAND THE RANGE ##
+        Y_patch = np.log1p(Y_patch)  # log(1 + Y)
 
         X_patch[~X_valid_mask_orig] = 0.0
         Y_patch[~Y_valid_mask] = 0.0
@@ -442,6 +444,10 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
         Y[Y == 9999] = np.nan
         ####
 
+        ### put in log transform for the stats ### 
+        Y = np.log1p(Y)
+        #### 
+        
         X_mask = metadata['X_mask'].numpy().astype(bool)
         Y_mask = metadata['Y_mask'].numpy().astype(bool)
         
