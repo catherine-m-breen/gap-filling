@@ -212,16 +212,13 @@ flight_to_basin = {
 }
 
 
-# -------------------------------
 # Snow class mapping
-# -------------------------------
-SNOW_CLASSES = [0, 1, 2, 4, 5, 6, 7]  # Original snow class values
-SNOW_CLASS_TO_IDX = {v: i for i, v in enumerate(SNOW_CLASSES)}  # Map to 0..4
-NUM_SNOW_CLASSES = len(SNOW_CLASSES)  # 5
+# This creates a dictionary for the channels for the one-hot encoded 
 
-# -------------------------------
-# Dataset
-# -------------------------------
+SNOW_CLASSES = [0, 1, 2, 4, 5, 6, 7]  # Original snow class values
+SNOW_CLASS_TO_IDX = {v: i for i, v in enumerate(SNOW_CLASSES)}  # Map to 0
+NUM_SNOW_CLASSES = len(SNOW_CLASSES)  # 6
+
 class ASOPatchDataset(Dataset):
     def __init__(
         self,
@@ -278,7 +275,7 @@ class ASOPatchDataset(Dataset):
         return patches
 
     def __len__(self) -> int:
-        return len(self.patches)
+        return len(self.patches) // 2
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, Dict]:
         file_idx, row, col = self.patches[idx]
@@ -294,6 +291,7 @@ class ASOPatchDataset(Dataset):
         Y[Y == -9999] = np.nan
         X[X == 9999] = np.nan   # Also catch positive nodata
         Y[Y == 9999] = np.nan
+        
         ####
         _, height, width = X.shape
         
@@ -313,20 +311,20 @@ class ASOPatchDataset(Dataset):
             Y_padded[:, :Y_patch.shape[1], :Y_patch.shape[2]] = Y_patch
             X_patch, Y_patch = X_padded, Y_padded
 
-        # -----------------------
         # Handle invalid values (BEFORE one-hot encoding)
-        # -----------------------
         X_valid_mask_orig = ~(np.isnan(X_patch) | (X_patch == -9999) | (X_patch[0] == 255) | (X_patch[1] == 250))
 
         ## catch any other weird values for now: 
-        Y_valid_mask = ~( np.isnan(Y_patch) |   (Y_patch == -9999) |  (Y_patch < -0.01) |  (Y_patch > 10.0))
+        #Y_valid_mask = ~(np.isnan(Y_patch) |   (Y_patch == -9999) |  (Y_patch < -0.01) |  (Y_patch > 10.0) |  (Y_patch < 0))
+        Y_valid_mask = (~np.isnan(Y_patch) & (Y_patch != -9999) & (Y_patch > 0) & (Y_patch <= 10.0)         # Reasonable upper bound (10 meters)
+)
 
         X_patch[~X_valid_mask_orig] = 0.0
         Y_patch[~Y_valid_mask] = 0.0
 
-        # -----------------------
         # One-hot encode snow_map (channel 0)
-        # -----------------------
+
+
         snow_orig = X_patch[0]  # Original snow class
         # Map original classes 0,1,2,4,5,6,7 
         snow_mapped = np.vectorize(SNOW_CLASS_TO_IDX.get)(snow_orig)
@@ -337,10 +335,8 @@ class ASOPatchDataset(Dataset):
         # Replace original snow channel with one-hot channels
         X_patch = np.concatenate([snow_onehot, X_patch[1:]], axis=0)
 
-        
-        # -----------------------
         # Update mask to match new channel count (17 channels)
-        # -----------------------
+     
         # Original mask had 11 channels, now we need 17 (7 snow one-hot + 10 others)
         # For snow one-hot channels (0-6): use the same mask as original snow channel
         # For remaining channels (7-16): use original channels 1-10
@@ -382,8 +378,8 @@ class ASOPatchDataset(Dataset):
             'col': col,
             'height': height,
             'width': width,
-            'X_mask': torch.from_numpy(X_valid_mask).float(),
-            'Y_mask': torch.from_numpy(Y_valid_mask).float()
+            'X_mask': torch.from_numpy(X_valid_mask).float(), # each patch has it's own x mask 
+            'Y_mask': torch.from_numpy(Y_valid_mask).float() # each patch has its own y mask
         }
 
         return X_tensor, Y_tensor, metadata

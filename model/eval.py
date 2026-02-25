@@ -35,7 +35,7 @@ class EvalConfig:
     results_dir = "./results"
     
     # SWE bins for analysis (in mm, AFTER denormalization)
-    swe_bins = [0, 100, 300, 600, 10000]
+    swe_bins = [0, 100, 300, 600, 1000]
     swe_labels = ['Low (0-100mm)', 'Medium (100-300mm)', 'High (300-600mm)', 'Very High (>600mm)']
     
     # Tree canopy bins (%)
@@ -159,12 +159,12 @@ def collect_predictions(model, dataloader, device, model_type='unet', global_sta
             
             # Get masks from metadata (TRUE validity masks!)
             Y_mask = metadata['Y_mask'].cpu().numpy()  # (B, 1, H, W)
-            X_mask = metadata['X_mask'].cpu().numpy()  # (B, 17, H, W) ← NOW 17 CHANNELS!
+            X_mask = metadata['X_mask'].cpu().numpy()  # (B, 17, H, W) 
             
             # Move to CPU
             pred_np = pred.cpu().numpy()      # (B, 1, H, W)
             target_np = Y.cpu().numpy()       # (B, 1, H, W)
-            X_np = X.cpu().numpy()            # (B, 17, H, W) ← NOW 17 CHANNELS!
+            X_np = X.cpu().numpy()            # (B, 17, H, W)
             
             # ========================================
             # DENORMALIZE predictions and targets

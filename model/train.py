@@ -11,9 +11,7 @@ import zarr
 from models import AttentionUNet, RandomForestBaseline, ToyModel
 
 
-# ============================================================
 # Config
-# ============================================================
 
 class Config:
     zarr_dir = "/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks"
@@ -33,20 +31,14 @@ class Config:
     unet_name = "attention_unet_final.pth"
     rf_name = "random_forest_baseline.joblib"
 
-
-# ============================================================
 # Metrics
-# ============================================================
 
 def compute_metrics(pred, target):
     mae = torch.mean(torch.abs(pred - target)).item()
     rmse = torch.sqrt(torch.mean((pred - target) ** 2)).item()
     return mae, rmse
 
-
-# ============================================================
 # Training
-# ============================================================
 
 def masked_loss(predictions, targets, mask, loss_fn= nn.MSELoss(reduction='none')): #nn.L1Loss(reduction='none')):
     """Compute loss only on valid pixels."""
@@ -60,9 +52,9 @@ def train():
     cfg = Config()
     Path(cfg.save_dir).mkdir(parents=True, exist_ok=True)
 
-    # -------------------------
+
     # Data
-    # -------------------------
+
     dataloaders = create_dataloaders(
         zarr_dir=cfg.zarr_dir,
         batch_size=cfg.batch_size,
@@ -73,13 +65,10 @@ def train():
         random_crop_train=cfg.random_crop_train
     )
 
-    # ============================================================
     # 1. Train Attention U-Net
-    # ============================================================
 
-    print("\n==============================")
     print("Training Attention U-Net")
-    print("==============================")
+
 
     model = ToyModel(in_channels=17).to(cfg.device)
     # Train this
@@ -100,9 +89,8 @@ def train():
 
         print(f"\nEpoch {epoch}/{cfg.epochs}")
 
-        # -------------------------
         # Train
-        # -------------------------
+
         model.train()
         train_loss = 0.0
 
@@ -122,9 +110,8 @@ def train():
         train_losses.append(train_loss)
         print(f"Train L1: {train_loss:.6f}")
 
-        # -------------------------
         # Validation
-        # -------------------------
+
         model.eval()
         val_loss = 0.0
         val_mae = 0.0
@@ -168,13 +155,9 @@ def train():
             torch.save(model.state_dict(), save_path)
             print(f"Saved best U-Net to {save_path}")
 
-    # ============================================================
     # Plot Training and Validation Loss
-    # ============================================================
-    
-    print("\n==============================")
+
     print("Generating Loss Plot")
-    print("==============================")
     
     epochs_range = range(1, cfg.epochs + 1)
     
@@ -200,13 +183,9 @@ def train():
             f.write(f"{i},{train_l:.6f},{val_l:.6f}\n")
     print(f"Saved loss values to {loss_txt_path}")
 
-    # ============================================================
     # 2. Train Random Forest Baseline
-    # ============================================================
 
-    print("\n==============================")
     print("Training Random Forest Baseline")
-    print("==============================")
 
     rf = RandomForestBaseline(n_estimators=100)
 
@@ -230,7 +209,6 @@ def train():
     #     device=cfg.device,
     #     global_stats=global_stats
     # )
-
 
 
 def check_zarr_validity(zarr_dir: str):
