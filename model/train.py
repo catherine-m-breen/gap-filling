@@ -33,10 +33,24 @@ class Config:
 
 # Metrics
 
-def compute_metrics(pred, target):
-    mae = torch.mean(torch.abs(pred - target)).item()
-    rmse = torch.sqrt(torch.mean((pred - target) ** 2)).item()
-    return mae, rmse
+## should we add the masks here?
+
+# def compute_metrics(pred, target, masks):
+#     mae = torch.mean(torch.abs(pred - target)).item()
+#     rmse = torch.sqrt(torch.mean((pred - target) ** 2)).item()
+#     return mae, rmse
+
+def compute_metrics(pred, target, mask):
+    """
+    Compute MAE and RMSE only over valid pixels indicated by mask.
+    """
+    masked_diff = (pred - target) * mask  # zero out invalid pixels
+    num_valid = mask.sum() + 1e-8  # avoid division by zero
+
+    mae = masked_diff.abs().sum() / num_valid
+    rmse = torch.sqrt((masked_diff ** 2).sum() / num_valid)
+
+    return mae.item(), rmse.item()
 
 # Training
 
@@ -72,10 +86,12 @@ def masked_loss(predictions, targets, mask, global_stats=None): #nn.L1Loss(reduc
     # num_valid = mask.sum() + 1e-8
     # return masked_loss_vals.sum() / num_valid
 
-    #weights = 1.0 + (torch.abs(targets) / (torch.abs(global_max) + 1e-8))
-    weights = torch.exp(targets / global_max)
-    
-    # Apply weights and mask
+    weights = 1.0 + (torch.abs(targets) / (torch.abs(global_max) + 1e-8))
+    #weights = torch.exp(targets / global_max)
+    # weights = 1.0 + torch.clamp(targets / global_max, 0, 10)
+    # weighted_error = (predictions - targets)**2 * weights * mask
+    # loss = weighted_error.sum() / (mask.sum() + 1e-8)
+    # # # Apply weights and mask
     weighted_error = squared_error * weights * mask
     
     num_valid = mask.sum() + 1e-8
@@ -175,8 +191,7 @@ def train():
                 outputs = model(X)
                 #loss = criterion(outputs, Y)
                 loss = masked_loss(outputs, Y, Y_mask, global_stats)  # ← Use masked loss!
-
-                mae, rmse = compute_metrics(outputs, Y)
+                mae, rmse = compute_metrics(outputs, Y, Y_mask)
 
                 val_loss += loss.item()
                 val_mae += mae
