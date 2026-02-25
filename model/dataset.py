@@ -80,6 +80,38 @@ class ASOPatchDataset(Dataset):
         print(f"{split.upper()} split: {len(self.zarr_files)} files, {len(self.patches)} patches")
         print(f"Basins: {self.basins}")
 
+    def _get_zarr_files(self) -> List[Path]:
+        """Get list of zarr files belonging to basins in this split."""
+        zarr_files = []
+        
+        for zarr_path in sorted(self.zarr_dir.glob("*.zarr")):
+            tif_name = zarr_path.stem + '.tif'
+            
+            if tif_name in flight_to_basin:
+                basin = flight_to_basin[tif_name]
+                if basin in self.basins:
+                    zarr_files.append(zarr_path)
+                    
+        return zarr_files
+    
+    def _create_patch_index(self) -> List[Tuple[int, int, int]]:
+        """Create index of all patches across all files."""
+        patches = []
+        
+        for file_idx, zarr_path in enumerate(self.zarr_files):
+            z = zarr.open(str(zarr_path), mode='r')
+            X = z['X']
+            _, height, width = X.shape
+
+            if self.random_crop:
+                patches.append((file_idx, -1, -1))
+            else:
+                for row in range(0, height - self.patch_size + 1, self.stride):
+                    for col in range(0, width - self.patch_size + 1, self.stride):
+                        patches.append((file_idx, row, col))
+        
+        return patches
+
     def __len__(self) -> int:
         return len(self.patches) // 4
 
@@ -114,7 +146,7 @@ class ASOPatchDataset(Dataset):
             X_padded = np.zeros((X_patch.shape[0], self.patch_size, self.patch_size), dtype=np.float32)
             Y_padded = np.zeros((Y_patch.shape[0], self.patch_size, self.patch_size), dtype=np.float32)
             X_padded[:, :X_patch.shape[1], :X_patch.shape[2]] = X_patch
-            Y_padded[:, :Y_patch.shape[1], :Y_patch.shape[2]] = Y_patch
+            Y_padded[:, :Y_patch.shape[1], :Y_patch.shape[2]] = Y_patch     
             X_patch, Y_patch = X_padded, Y_padded
 
         # Handle invalid values (BEFORE one-hot encoding)
