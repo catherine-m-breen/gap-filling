@@ -54,48 +54,73 @@ def compute_metrics(pred, target, mask):
 
 # Training
 
-def masked_loss(predictions, targets, mask, global_stats=None): #nn.L1Loss(reduction='none')):
-    ## we are only computing the loss on the valid Y pixels 
-    """Compute loss only on Y valid pixels."""
+# def masked_loss(predictions, targets, mask, global_stats=None): #nn.L1Loss(reduction='none')):
+#     ## we are only computing the loss on the valid Y pixels 
+#     """Compute loss only on Y valid pixels."""
 
-    ### new code to weight the larger swe values ###
-    squared_error = (predictions - targets) ** 2 
-    # This would be the max for each batch
-    #max_target = torch.max(torch.abs(targets[mask > 0])) + 1e-8 ## weighs the larger pixel in the patch 
+#     ### new code to weight the larger swe values ###
+#     squared_error = (predictions - targets) ** 2 
+#     # This would be the max for each batch
+#     #max_target = torch.max(torch.abs(targets[mask > 0])) + 1e-8 ## weighs the larger pixel in the patch 
 
-    ### this is the global Mean/Max
-    Y_mean = global_stats['Y_mean']
-    Y_std = global_stats['Y_std']
-    Y_max_meters = global_stats['Y_max']
-    Y_max_normalized = (Y_max_meters - Y_mean) / (Y_std + 1e-8)
-    # targets_denorm = targets * Y_std + Y_mean  # Back to meters
+#     ### this is the global Mean/Max
+#     Y_mean = global_stats['Y_mean']
+#     Y_std = global_stats['Y_std']
+#     Y_max_meters = global_stats['Y_max']
+#     Y_max_normalized = (Y_max_meters - Y_mean) / (Y_std + 1e-8)
+#     # targets_denorm = targets * Y_std + Y_mean  # Back to meters
 
-    # ## because the global i
-    # targets_denorm = targets * Y_std + Y_mean  # log-space
-    # targets_denorm = torch.expm1(targets_denorm)  # meters
-    # Use GLOBAL max (converted to tensor)
-    global_max = torch.tensor(Y_max_normalized, device=targets.device, dtype=targets.dtype)
+#     # ## because the global i
+#     # targets_denorm = targets * Y_std + Y_mean  # log-space
+#     # targets_denorm = torch.expm1(targets_denorm)  # meters
+#     # Use GLOBAL max (converted to tensor)
+#     global_max = torch.tensor(Y_max_normalized, device=targets.device, dtype=targets.dtype)
     
-    # Linear weighting: weight = 1 + (target / global_max)
-    # 0m SWE → weight = 1.0
-    # max SWE (e.g., 2m) → weight = 2.0
-    #weights = 1.0 + (torch.abs(targets) / (global_max + 1e-8))
+#     # Linear weighting: weight = 1 + (target / global_max)
+#     # 0m SWE → weight = 1.0
+#     # max SWE (e.g., 2m) → weight = 2.0
+#     #weights = 1.0 + (torch.abs(targets) / (global_max + 1e-8))
 
-    # element_loss = loss_fn(predictions, targets)
-    # masked_loss_vals = element_loss * mask
-    # num_valid = mask.sum() + 1e-8
-    # return masked_loss_vals.sum() / num_valid
+#     # element_loss = loss_fn(predictions, targets)
+#     # masked_loss_vals = element_loss * mask
+#     # num_valid = mask.sum() + 1e-8
+#     # return masked_loss_vals.sum() / num_valid
 
-    weights = 1.0 + (torch.abs(targets) / (torch.abs(global_max) + 1e-8))
-    #weights = torch.exp(targets / global_max)
-    # weights = 1.0 + torch.clamp(targets / global_max, 0, 10)
-    # weighted_error = (predictions - targets)**2 * weights * mask
-    # loss = weighted_error.sum() / (mask.sum() + 1e-8)
-    # # # Apply weights and mask
-    weighted_error = squared_error * weights * mask
+#     weights = 1.0 + (torch.abs(targets) / (torch.abs(global_max) + 1e-8))
+#     #weights = torch.exp(targets / global_max)
+#     # weights = 1.0 + torch.clamp(targets / global_max, 0, 10)
+#     # weighted_error = (predictions - targets)**2 * weights * mask
+#     # loss = weighted_error.sum() / (mask.sum() + 1e-8)
+#     # # # Apply weights and mask
+#     weighted_error = squared_error * weights * mask
     
-    num_valid = mask.sum() + 1e-8
-    return weighted_error.sum() / num_valid
+#     num_valid = mask.sum() + 1e-8
+#     return weighted_error.sum() / num_valid
+
+def masked_loss(predictions, targets, mask, global_stats=None):
+    """
+    Masked L1 loss with optional bounded weighting for larger targets.
+    """
+    # Compute per-pixel L1 error
+    error = torch.abs(predictions - targets)
+
+    if global_stats is not None:
+        # Compute bounded weights
+        Y_mean = global_stats['Y_mean']
+        Y_std = global_stats['Y_std']
+        Y_max_meters = global_stats['Y_max']
+        Y_max_normalized = (Y_max_meters - Y_mean) / (Y_std + 1e-8)
+        global_max = torch.tensor(Y_max_normalized, device=targets.device, dtype=targets.dtype)
+        
+        # Linear weight, clipped to avoid explosion
+        weights = 1.0 + torch.clamp(torch.abs(targets) / (global_max + 1e-8), 0.0, 10.0)
+        error = error * weights
+
+    # Apply mask
+    masked_error = error * mask
+    loss = masked_error.sum() / (mask.sum() + 1e-8)
+
+    return loss
 
 def train():
 
