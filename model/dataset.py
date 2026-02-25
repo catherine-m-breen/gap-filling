@@ -466,7 +466,10 @@ def compute_global_statistics(zarr_dir: str, split: str = 'train') -> Dict:
         Y_sum += Y_valid_values.sum()
         Y_sq_sum += (Y_valid_values ** 2).sum()
         Y_count += Y_valid_values.size
-        Y_max = np.max(Y_valid_values) if Y_max < np.max(Y_valid_values) else Y_max
+        #Y_max = np.max(Y_valid_values) if Y_max < np.max(Y_valid_values) else Y_max
+        if Y_valid_values.size > 0:  # 
+            batch_max = np.max(Y_valid_values)
+            Y_max = np.maximum(Y_max, batch_max)
                     
         if (i + 1) % 100 == 0:
             print(f"  Processed {i+1}/{len(temp_dataset)} patches")
