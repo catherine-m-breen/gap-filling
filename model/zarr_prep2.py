@@ -314,7 +314,7 @@ for aso_flight in asopath:
     unique_classes = np.unique(snow[~np.isnan(snow)])
     print(f"  Snow classes found: {unique_classes}")
     
-    snow_classes = [1, 2, 3, 4, 5, 6, 7]  # Adjust based on your data
+    snow_classes = [1, 2, 4, 5, 6, 7]  # Adjust based on your data
     snow_one_hot = []
     for class_id in snow_classes:
         snow_class_mask = (snow == class_id).astype("float32")
@@ -392,7 +392,6 @@ for aso_flight in asopath:
                 "forested_mask",
                 "snow_class_1_tundra",
                 "snow_class_2_boreal_forest",
-                "snow_class_3_maritime",
                 "snow_class_4_ephemeral",
                 "snow_class_5_prairie",
                 "snow_class_6_montane",
