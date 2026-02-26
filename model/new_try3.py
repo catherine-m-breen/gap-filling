@@ -936,7 +936,7 @@ def main():
     stride = 64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./checkpoints_elevation_fixedGauss"
+    checkpoint_dir = "./checkpoints_elevation_MSELoss"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
@@ -1012,9 +1012,12 @@ def main():
     augmented_x = []
     augmented_y = []
     augmented_y_masks = []
+    augmented_filenames = []
+    augmented_locs = []
     
     ############# this is all data, even where we have the masks !! #############
-    for x, y, z in zip(train_x_norm, train_y_norm, train_y_mask_patched):
+    #  train_filenames, train_patch_loc, val_filenames, val_patch_loc, test_filenames, test_patch_loc
+    for x, y, z, name, loc in zip(train_x_norm, train_y_norm, train_y_mask_patched, train_filenames, train_patch_loc):
         # Apply flip
         x_flip, y_flip, y_mask_flip = random_flip(x, y, z)
         
@@ -1024,6 +1027,8 @@ def main():
         augmented_x.append(x_noisy)
         augmented_y.append(y_flip)
         augmented_y_masks.append(y_mask_flip)
+        augmented_filenames.append(name)
+        augmented_filenames.append(loc)
 
     # Combine original + augmented
     combined_train_x = train_x_norm + augmented_x
@@ -1076,21 +1081,21 @@ def main():
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
     
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
-    #criterion = nn.MSELoss() #nn.L1Loss()
-    class ValueWeightedMSELoss(nn.Module):
-        def __init__(self, alpha=1.0):
-            super().__init__()
-            self.alpha = alpha
+    criterion = nn.MSELoss() #nn.L1Loss()
+    # class ValueWeightedMSELoss(nn.Module):
+    #     def __init__(self, alpha=1.0):
+    #         super().__init__()
+    #         self.alpha = alpha
         
-        def forward(self, predictions, targets):
-            #IPython.embed()
-            # Weight proportional to target value (higher SWE = higher weight)
-            weights = 1.0 + self.alpha * (targets / (targets.max() + 1e-8))
-            loss = (predictions - targets) ** 2
-            weighted_loss = loss * weights
-            return weighted_loss.mean()
+    #     def forward(self, predictions, targets):
+    #         #IPython.embed()
+    #         # Weight proportional to target value (higher SWE = higher weight)
+    #         weights = 1.0 + self.alpha * (targets / (targets.max() + 1e-8))
+    #         loss = (predictions - targets) ** 2
+    #         weighted_loss = loss * weights
+    #         return weighted_loss.mean()
 
-    criterion = ValueWeightedMSELoss(alpha=2.0)   
+    # criterion = ValueWeightedMSELoss(alpha=2.0)   
 
     scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-6)
     
