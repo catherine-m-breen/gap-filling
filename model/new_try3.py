@@ -805,7 +805,7 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
     #IPython.embed()
-    num_epochs = 20 #10 #1000
+    num_epochs = 2 #10 #1000
     batch_size = 16
     learning_rate = 1e-4 #0.01
     patience = 20 #400
@@ -905,7 +905,7 @@ def main():
             self.labels = labels
         
         def __len__(self):
-            return len(self.data) #// 150
+            return len(self.data) // 150
         
         def __getitem__(self, idx):
             # Data already patched, just return
