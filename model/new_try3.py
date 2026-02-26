@@ -75,71 +75,71 @@ def add_gaussian_noise(image, mean=0, sigma=25):
 # Dataset Class WITH PATCHING
 # ============================================================
 
-class ASODataset(Dataset):
-    def __init__(self, data, labels, crop_size=(128, 128), patch_size=128, stride=64, augment=False):
-        """
-        Dataset that creates patches from full zarr images on-the-fly.
+# class ASODataset(Dataset):
+#     def __init__(self, data, labels, crop_size=(128, 128), patch_size=128, stride=64, augment=False):
+#         """
+#         Dataset that creates patches from full zarr images on-the-fly.
         
-        Args:
-            data: List of full images (each is (1, C, H, W))
-            labels: List of full labels (each is (1, 1, H, W))
-            crop_size: Size for random cropping during augmentation
-            patch_size: Size of patches to extract from full images
-            stride: Stride for patch extraction
-            augment: Whether to apply random cropping/flipping
-        """
-        self.data = data
-        self.labels = labels
-        self.crop_size = crop_size
-        self.patch_size = patch_size
-        self.stride = stride
-        self.augment = augment
+#         Args:
+#             data: List of full images (each is (1, C, H, W))
+#             labels: List of full labels (each is (1, 1, H, W))
+#             crop_size: Size for random cropping during augmentation
+#             patch_size: Size of patches to extract from full images
+#             stride: Stride for patch extraction
+#             augment: Whether to apply random cropping/flipping
+#         """
+#         self.data = data
+#         self.labels = labels
+#         self.crop_size = crop_size
+#         self.patch_size = patch_size
+#         self.stride = stride
+#         self.augment = augment
         
-        # Create patch index: (file_idx, row, col)
-        self.patch_index = []
-        for file_idx in range(len(data)):
-            _, _, H, W = data[file_idx].shape
-            for row in range(0, H - patch_size + 1, stride):
-                for col in range(0, W - patch_size + 1, stride):
-                    self.patch_index.append((file_idx, row, col))
+#         # Create patch index: (file_idx, row, col)
+#         self.patch_index = []
+#         for file_idx in range(len(data)):
+#             _, _, H, W = data[file_idx].shape
+#             for row in range(0, H - patch_size + 1, stride):
+#                 for col in range(0, W - patch_size + 1, stride):
+#                     self.patch_index.append((file_idx, row, col))
         
-        print(f"  Created {len(self.patch_index)} patches from {len(data)} images")
+#         print(f"  Created {len(self.patch_index)} patches from {len(data)} images")
 
-    def __len__(self):
-        return len(self.patch_index) 
+#     def __len__(self):
+#         return len(self.patch_index) 
 
-    def __getitem__(self, idx):
-        IPython.embed()
-        file_idx, row, col = self.patch_index[idx]
+#     def __getitem__(self, idx):
+#         IPython.embed()
+#         file_idx, row, col = self.patch_index[idx]
         
-        # Extract patch from full image
-        data_full = self.data[file_idx]
-        label_full = self.labels[file_idx]
+#         # Extract patch from full image
+#         data_full = self.data[file_idx]
+#         label_full = self.labels[file_idx]
         
-        data_patch = data_full[:, :, row:row+self.patch_size, col:col+self.patch_size]
-        label_patch = label_full[:, :, row:row+self.patch_size, col:col+self.patch_size]
+#         data_patch = data_full[:, :, row:row+self.patch_size, col:col+self.patch_size]
+#         label_patch = label_full[:, :, row:row+self.patch_size, col:col+self.patch_size]
         
-        # Remove batch dimension (1, C, H, W) -> (C, H, W)
-        data_patch = data_patch[0]
-        label_patch = label_patch[0]
+#         # Remove batch dimension (1, C, H, W) -> (C, H, W)
+#         data_patch = data_patch[0]
+#         label_patch = label_patch[0]
 
-        label_mask = ((label_patch > 0) & (~np.isnan(label_patch))).astype(np.float32)
+#         label_mask = ((label_patch > 0) & (~np.isnan(label_patch))).astype(np.float32)
         
-        if self.augment:
-            # Apply same crop/flip to data, label, AND mask
-            # Stack all three along channel dimension
-            combined = np.concatenate([data_patch, label_patch, label_mask], axis=0)
-            combined = random_crop(combined[None, :, :, :], self.crop_size)[0]
+#         if self.augment:
+#             # Apply same crop/flip to data, label, AND mask
+#             # Stack all three along channel dimension
+#             combined = np.concatenate([data_patch, label_patch, label_mask], axis=0)
+#             combined = random_crop(combined[None, :, :, :], self.crop_size)[0]
             
-            num_data_channels = data_patch.shape[0]
-            num_label_channels = label_patch.shape[0]
+#             num_data_channels = data_patch.shape[0]
+#             num_label_channels = label_patch.shape[0]
             
-            # Split back out
-            data_patch = combined[:num_data_channels, :, :]
-            label_patch = combined[num_data_channels:num_data_channels+num_label_channels, :, :]
-            label_mask = combined[num_data_channels+num_label_channels:, :, :]
+#             # Split back out
+#             data_patch = combined[:num_data_channels, :, :]
+#             label_patch = combined[num_data_channels:num_data_channels+num_label_channels, :, :]
+#             label_mask = combined[num_data_channels+num_label_channels:, :, :]
             
-        return data_patch, label_patch, (row,col) #, label_mask
+#         return data_patch, label_patch #, label_mask
 
 # ============================================================
 # Model (2D CNN like original script)
@@ -404,6 +404,10 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
     train_y_mask = []
     val_y_mask = []
     test_y_mask = []
+
+    filenames_train = []
+    filenames_val = []
+    filenames_test = []
     
     # ADD THIS: Track extreme values
     extreme_value_files = []
@@ -505,14 +509,17 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
             train_x.append(X)
             train_y.append(Y)
             train_y_mask.append(Y_mask)
+            filenames_train.append(tif_name)
         elif split == 'val':
             val_x.append(X)
             val_y.append(Y)
             val_y_mask.append(Y_mask)
+            filenames_val.append(tif_name)
         elif split == 'test':
             test_x.append(X)
             test_y.append(Y)
             test_y_mask.append(Y_mask)
+            filenames_test.append(tif_name)
     
     print(f"\nLoaded: {len(train_x)} train, {len(val_x)} val, {len(test_x)} test FULL images")
     
@@ -545,7 +552,11 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
     else:
         print("\n✓ No files with Y > 10m found\n")
     
-    return train_x, train_y, val_x, val_y, test_x, test_y, train_y_mask, val_y_mask, test_y_mask ## also pass all the masks!! this is going to be all the stuff where we don't have data and we don't care about
+    return train_x, train_y, val_x, val_y, test_x, test_y, train_y_mask, val_y_mask, test_y_mask, filenames_train, filenames_val, filenames_test
+ 
+
+
+## also pass all the masks!! this is going to be all the stuff where we don't have data and we don't care about
 
 # ============================================================
 # Patch Conversion Function
@@ -927,7 +938,7 @@ def main():
     print("LOADING FULL ZARR FILES")
     print("="*60)
     
-    train_x, train_y, val_x, val_y, test_x, test_y, train_y_mask, val_y_mask, test_y_mask = load_full_zarr_files(
+    train_x, train_y, val_x, val_y, test_x, test_y, train_y_mask, val_y_mask, test_y_mask, filenames_train, filenames_val, filenames_test = load_full_zarr_files(
         zarr_dir, split_basin_dict, flight_to_basin,
         skip_tb_channels=True  # ← NEW PARAMETER
     )
