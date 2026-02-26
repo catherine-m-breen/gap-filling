@@ -933,8 +933,8 @@ def main():
     patience = 30 #400
     
     # Patching config
-    patch_size = 256#128
-    stride = patch_size/ 2 #64  # 50% overlap
+    patch_size = 256 #128
+    stride = int(patch_size/ 2) #64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
     checkpoint_dir = "./checkpoints_elevation_MSELoss_1e-3_150_ps256"
