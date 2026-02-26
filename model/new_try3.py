@@ -752,7 +752,7 @@ def normalize_dataset_per_channel(train_data, val_data, skip_channels=None):
 # +++++++++++
 # Add this function after validate_model():
 
-def evaluate_test_set(model, test_x, test_y, y_mean, y_std, device, checkpoint_dir):
+def evaluate_test_set(model, test_x, test_y, test_mask, y_mean, y_std, device, checkpoint_dir):
     """
     Evaluate model on test set and create predicted vs actual plot.
 
@@ -776,10 +776,11 @@ def evaluate_test_set(model, test_x, test_y, y_mean, y_std, device, checkpoint_d
     all_labels = []
     
     with torch.no_grad():
-        for i, (x_patch, y_patch) in enumerate(zip(test_x, test_y)):
+        for i, (x_patch, y_patch, y_mask) in enumerate(zip(test_x, test_y, test_mask)):
             # Convert to torch and add batch dimension
             x_tensor = torch.from_numpy(x_patch).to(device, dtype=torch.float32)
             y_tensor = torch.from_numpy(y_patch).to(device, dtype=torch.float32)
+            y_mask = torch.from_numpy(y_mask).to(device, dtype=torch.bool)
             
             # Model expects (batch, C, H, W), data is (1, C, H, W)
             if x_tensor.shape[0] == 1:
@@ -791,12 +792,14 @@ def evaluate_test_set(model, test_x, test_y, y_mean, y_std, device, checkpoint_d
             # squeeze prediction to match label shape
             if len(y_tensor.shape) == 4 and y_tensor.shape[1] == 1:
                 y_tensor = y_tensor.squeeze(1)
+            if len(y_mask_tensor.shape) == 4 and y_mask_tensor.shape[1] == 1:
+                y_mask_tensor = y_mask_tensor.squeeze(1)
             
             # if len(output.shape) == 3 and output.shape[0] == 1:
             #     output = output.squeeze(0)
             
             # create mask for valid pixels
-            mask = (y_tensor > 0) & (~torch.isnan(y_tensor))
+            mask = y_mask_tensor #(y_tensor > 0) & (~torch.isnan(y_tensor))
             
             # Extract valid pixels
             #IPython.embed() 
@@ -816,6 +819,12 @@ def evaluate_test_set(model, test_x, test_y, y_mean, y_std, device, checkpoint_d
     preds_meters = all_preds * y_std + y_mean
     labels_meters = all_labels * y_std + y_mean
     
+    ########### log ##########
+    # Undo log transform; preds_meteres and labels_meters technically in log until you undo it. 
+    preds_meters = np.expm1(preds_meters)
+    labels_meters = np.expm1(labels_meters)
+    ##########################
+
     # Compute metrics
     mae = mean_absolute_error(labels_meters, preds_meters)
     rmse = np.sqrt(mean_squared_error(labels_meters, preds_meters))
@@ -965,11 +974,20 @@ def main():
     print("\n" + "="*60)
     print("NORMALIZING DATA")
     print("="*60)
+
     
+
+    ## this just takes the nan values and does the normalization that way, it doesn't seem great, but not horrible either
     train_x_norm, val_x_norm, norm_mean, norm_std = normalize_dataset_per_channel(train_x, val_x, skip_channels=[1])
     
     # Normalize labels (Y) - same approach
     #IPython.embed()
+    ################################
+    # Apply log1p to each patch (preserve NaNs!)
+    train_y = [np.log1p(y) for y in train_y]
+    val_y   = [np.log1p(y) for y in val_y]
+    ###########################################
+
     train_y_all = np.concatenate(train_y + val_y, axis=0)
     train_y_all_masks = np.concatenate(train_y_mask_patched + val_y_mask_patched, axis=0)
     #y_mean = np.nanmean(train_y_all)
@@ -1197,18 +1215,20 @@ def main():
     print("\nNormalizing test data...")
     #### right now just using the train data ...... becuase it should overfit
     ###### need to add the mask ######
-    test_x_norm = []
-    for data in train_x:
-        normalized = (data - norm_mean) / (norm_std + 1e-7)
-        test_x_norm.append(normalized)
+    # test_x_norm = []
+    # for data in train_x:
+    #     normalized = (data - norm_mean) / (norm_std + 1e-7)
+    #     test_x_norm.append(normalized)
     
-    test_y_norm = [(y - y_mean) / (y_std + 1e-7) for y in train_y]
+    # #test_y_log = [np.log1p(y) for y in train_y]
+    # test_y_norm = [(y - y_mean) / (y_std + 1e-7) for y in train_y]
     
     # Evaluate on test set
     test_results = evaluate_test_set(
         model, 
-        test_x_norm, 
-        test_y_norm, 
+        train_x_norm, 
+        train_y_norm, 
+        train_y_mask_patched,  # add the masks
         y_mean, 
         y_std, 
         device, 
