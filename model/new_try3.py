@@ -668,18 +668,18 @@ def evaluate_test_set(model, test_x, test_y, y_mean, y_std, device, checkpoint_d
             # Get prediction
             output = model(x_tensor)
             
-            # Squeeze to match label shape
+            # squeeze prediction to match label shape
             if len(y_tensor.shape) == 4 and y_tensor.shape[1] == 1:
                 y_tensor = y_tensor.squeeze(1)
             
-            if len(output.shape) == 3 and output.shape[0] == 1:
-                output = output.squeeze(0)
+            # if len(output.shape) == 3 and output.shape[0] == 1:
+            #     output = output.squeeze(0)
             
-            # Create mask for valid pixels
+            # create mask for valid pixels
             mask = (y_tensor > 0) & (~torch.isnan(y_tensor))
             
             # Extract valid pixels
-            IPython.embed() 
+            #IPython.embed() 
             valid_preds = output[mask].cpu().numpy()
             valid_labels = y_tensor[mask].cpu().numpy()
             
@@ -701,11 +701,11 @@ def evaluate_test_set(model, test_x, test_y, y_mean, y_std, device, checkpoint_d
     rmse = np.sqrt(mean_squared_error(labels_meters, preds_meters))
     r2 = r2_score(labels_meters, preds_meters)
     
-    print(f"\nTest Set Metrics:")
-    print(f"  MAE:  {mae:.4f} m")
-    print(f"  RMSE: {rmse:.4f} m")
-    print(f"  R²:   {r2:.4f}")
-    print(f"  Valid pixels: {len(all_labels):,}")
+    print(f"\ntest set metrics:")
+    print(f"  mae:  {mae:.4f} m")
+    print(f"  rmse: {rmse:.4f} m")
+    print(f"  r²:   {r2:.4f}")
+    print(f"  valid pixels: {len(all_labels):,}")
     
     # Create scatter plot
     fig, ax = plt.subplots(figsize=(10, 10))
@@ -805,7 +805,7 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
     #IPython.embed()
-    num_epochs = 2 #10 #1000
+    num_epochs = 20 #10 #1000
     batch_size = 16
     learning_rate = 1e-4 #0.01
     patience = 20 #400
@@ -905,7 +905,7 @@ def main():
             self.labels = labels
         
         def __len__(self):
-            return len(self.data) // 150
+            return len(self.data) #// 150
         
         def __getitem__(self, idx):
             # Data already patched, just return
