@@ -605,8 +605,9 @@ def convert_to_patches(train_x, train_y, val_x, val_y, test_x, test_y, train_y_m
                     label_patch = label[:, :, row:row+patch_size, col:col+patch_size]
                     mask_patch = mask[:, :, row:row+patch_size, col:col+patch_size]
                     # Quality filter: skip patches with too many invalid pixels
-                    valid_pixels = (label_patch != 0) & (~np.isnan(label_patch))
-                    valid_fraction = valid_pixels.sum() / label_patch.size
+                    # valid_pixels = (label_patch != 0) & (~np.isnan(label_patch))
+                    # valid_fraction = valid_pixels.sum() / label_patch.size
+                    valid_fraction = mask_patch.sum() / mask_patch.size
                     
                     if valid_fraction < min_valid_fraction:
                         skipped_patches += 1
@@ -928,15 +929,15 @@ def main():
     #IPython.embed()
     num_epochs = 40 #10 #1000
     batch_size = 16
-    learning_rate = 1e-6 #0.01 ### learning rate start it really small? it will take longer to learn though 
+    learning_rate = 1e-3 #0.01 ### learning rate start it really small? it will take longer to learn though 
     patience = 30 #400
     
     # Patching config
-    patch_size = 128
-    stride = 64  # 50% overlap
+    patch_size = 256#128
+    stride = patch_size/ 2 #64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./checkpoints_elevation_MSELoss_1e-6_150"
+    checkpoint_dir = "./checkpoints_elevation_MSELoss_1e-3_150_ps256"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
