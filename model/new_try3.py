@@ -926,6 +926,44 @@ def evaluate_test_set(model, test_x, test_y, test_mask, y_mean, y_std, device, c
     }
 #+++++++++++++++
 
+class WeightedSmoothL1Loss(nn.Module):
+    """
+    SmoothL1Loss that weights errors by target magnitude.
+    Higher SWE values get higher penalty for errors.
+    """
+    def __init__(self, beta=1.0, weight_power=1.0):
+        """
+        Args:
+            beta: SmoothL1Loss transition point (quadratic to linear)
+            weight_power: Exponent for weighting (1.0 = linear, 2.0 = quadratic)
+        """
+        super(WeightedSmoothL1Loss, self).__init__()
+        self.beta = beta
+        self.weight_power = weight_power
+    
+    def forward(self, pred, target):
+        """
+        Args:
+            pred: Model predictions
+            target: Ground truth labels
+        """
+        # Compute difference
+        diff = pred - target
+        abs_diff = torch.abs(diff)
+        
+        # Smooth L1: quadratic when |error| < beta, linear when |error| >= beta
+        loss = torch.where(
+            abs_diff < self.beta,
+            0.5 * (diff ** 2) / self.beta,
+            abs_diff - 0.5 * self.beta
+        )
+        
+        # Weight by target magnitude (higher SWE = more penalty)
+        weights = (torch.abs(target) + 1.0) ** self.weight_power
+        
+        # Apply weights and return mean
+        return (loss * weights).mean()
+
 # ============================================================
 # Main Training Script
 # ============================================================
@@ -1100,8 +1138,8 @@ def main():
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
     
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
-    criterion = nn.SmoothL1Loss(beta=1.0) #nn.MSELoss() #nn.L1Loss()
-
+    #criterion = nn.SmoothL1Loss(beta=1.0) #nn.MSELoss() #nn.L1Loss()
+    criterion = WeightedSmoothL1Loss(beta=1.0, weight_power=1.0)
     # class ValueWeightedMSELoss(nn.Module):
     #     def __init__(self, alpha=1.0):
     #         super().__init__()
