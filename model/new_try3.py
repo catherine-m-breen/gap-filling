@@ -227,6 +227,7 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
         #IPython.embed()
         l1_lambda = 0.000001
         l1_norm = sum(p.abs().sum() for p in model.parameters())
+        IPython.embed()
         loss = criterion(output_masked, labels_masked, mask_flat) + l1_lambda * l1_norm
 
         loss.backward()
@@ -975,7 +976,7 @@ def main():
             self.alpha = alpha
         
         def forward(self, predictions, targets, masks):
-            IPython.embed()
+            #IPython.embed()
             # Weight proportional to target value (higher SWE = higher weight)
             weights = 1.0 + self.alpha * (targets[masks] / (targets[masks].max() + 1e-8))
             loss = (predictions[masks] - targets[masks]) ** 2
