@@ -310,6 +310,10 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
     val_x, val_y = [], []
     test_x, test_y = [], []
     
+    train_y_mask = []
+    val_y_mask = []
+    test_y_mask = []
+    
     # ADD THIS: Track extreme values
     extreme_value_files = []
     
@@ -366,11 +370,12 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
                 print(f"  Removed TB channels, X shape: {X.shape[0]} channels")
         
         # Handle invalid values
-        #X[X == -9999] = 0.0
+        X[X == -9999] = 0.0
         #X[X == 9999] = 0.0
         #Y[Y == -9999] = 0.0
         #Y[Y == 9999] = 0.0
         Y[Y < 0] = np.nan  # No negative SWE
+        Y_mask = ~np.isnan(Y)  # Boolean mask: True where valid, False where NaN ## pass this through so we can only look where we have data! 
         #Y[Y > 10] = np.nan # not values greater than 10? 
 
         # ========================================
@@ -399,6 +404,7 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         # Add batch dimension for consistency: (1, C, H, W)
         X = X[None, :, :, :]
         Y = Y[None, :, :, :]
+        Y_mask = Y_mask[None, :, :, :]
         
         if len(train_x) == 0:  # Only print once
             print(f"  Loaded {flight_id} ({basin}, {split}): X={X.shape}, Y={Y.shape}")
@@ -407,12 +413,15 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         if split == 'train':
             train_x.append(X)
             train_y.append(Y)
+            train_y_mask.append(Y_mask)
         elif split == 'val':
             val_x.append(X)
             val_y.append(Y)
+            val_y_mask.append(Y_mask)
         elif split == 'test':
             test_x.append(X)
             test_y.append(Y)
+            test_y_mask.append(Y_mask)
     
     print(f"\nLoaded: {len(train_x)} train, {len(val_x)} val, {len(test_x)} test FULL images")
     
@@ -445,13 +454,13 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
     else:
         print("\n✓ No files with Y > 10m found\n")
     
-    return train_x, train_y, val_x, val_y, test_x, test_y
+    return train_x, train_y, val_x, val_y, test_x, test_y, train_y_mask, val_y_mask, test_y_mask ## also pass all the masks!! this is going to be all the stuff where we don't have data and we don't care about
 
 # ============================================================
 # Patch Conversion Function
 # ============================================================
 
-def convert_to_patches(train_x, train_y, val_x, val_y, test_x, test_y, 
+def convert_to_patches(train_x, train_y, val_x, val_y, test_x, test_y, train_y_mask, val_y_mask, test_y_mask,
                       patch_size=128, stride=64, min_valid_fraction=0.3):
     """
     Convert full images to patches for all splits.
@@ -469,15 +478,16 @@ def convert_to_patches(train_x, train_y, val_x, val_y, test_x, test_y,
     print("CONVERTING TO PATCHES")
     print("="*60)
     
-    def extract_patches_from_list(data_list, label_list, split_name):
+    def extract_patches_from_list(data_list, label_list, mask_list, split_name):
         """Extract patches from a list of images."""
         patched_data = []
         patched_labels = []
+        patched_masks = []
         total_patches = 0
         skipped_patches = 0
         
         print(f"\n{split_name} split:")
-        for img_idx, (data, label) in enumerate(zip(data_list, label_list)):
+        for img_idx, (data, label, mask) in enumerate(zip(data_list, label_list, mask_list)):
             _, C, H, W = data.shape
             _, _, H_y, W_y = label.shape
             
@@ -488,7 +498,7 @@ def convert_to_patches(train_x, train_y, val_x, val_y, test_x, test_y,
                     # Extract patch
                     data_patch = data[:, :, row:row+patch_size, col:col+patch_size]
                     label_patch = label[:, :, row:row+patch_size, col:col+patch_size]
-                    
+                    mask_patch = mask[:, :, row:row+patch_size, col:col+patch_size]
                     # Quality filter: skip patches with too many invalid pixels
                     valid_pixels = (label_patch != 0) & (~np.isnan(label_patch))
                     valid_fraction = valid_pixels.sum() / label_patch.size
@@ -499,6 +509,7 @@ def convert_to_patches(train_x, train_y, val_x, val_y, test_x, test_y,
                     
                     patched_data.append(data_patch)
                     patched_labels.append(label_patch)
+                    patched_masks.append(mask_patch)
                     img_patches += 1
                     total_patches += 1
             
@@ -506,13 +517,13 @@ def convert_to_patches(train_x, train_y, val_x, val_y, test_x, test_y,
                 print(f"  Processed {img_idx + 1}/{len(data_list)} images, "
                       f"{total_patches} patches created, {skipped_patches} skipped")
         
-        print(f"  Total {split_name}: {total_patches} patches from {len(data_list)} images")
-        return patched_data, patched_labels
+        print(f"  Total {split_name}: {total_patches} patches from {len(data_list)} images and {len(mask_list)} masks")
+        return patched_data, patched_labels, patched_masks
     
     # Convert each split
-    train_x_patched, train_y_patched = extract_patches_from_list(train_x, train_y, "TRAIN")
-    val_x_patched, val_y_patched = extract_patches_from_list(val_x, val_y, "VAL")
-    test_x_patched, test_y_patched = extract_patches_from_list(test_x, test_y, "TEST")
+    train_x_patched, train_y_patched, train_y_mask_patched = extract_patches_from_list(train_x, train_y, train_y_mask, "TRAIN")
+    val_x_patched, val_y_patched, val_y_mask_patched = extract_patches_from_list(val_x, val_y, val_y_mask, "VAL")
+    test_x_patched, test_y_patched, test_y_mask_patched = extract_patches_from_list(test_x, test_y, test_y_mask "TEST")
     
     print(f"\n{'='*60}")
     print(f"PATCHING COMPLETE")
@@ -521,7 +532,7 @@ def convert_to_patches(train_x, train_y, val_x, val_y, test_x, test_y,
     print(f"  Test:  {len(test_x_patched)} patches")
     print(f"{'='*60}\n")
     
-    return train_x_patched, train_y_patched, val_x_patched, val_y_patched, test_x_patched, test_y_patched
+    return train_x_patched, train_y_patched, val_x_patched, val_y_patched, test_x_patched, test_y_patched, train_y_mask_patched, val_y_mask_patched, test_y_mask_patched
 
 # def normalize_dataset_per_channel(train_data, val_data):
 #     """
@@ -807,9 +818,9 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
     #IPython.embed()
-    num_epochs = 20 #10 #1000
+    num_epochs = 100 #10 #1000
     batch_size = 16
-    learning_rate = 1e-4 #0.01
+    learning_rate = 1e-5 #0.01
     patience = 20 #400
     
     # Patching config
@@ -825,15 +836,16 @@ def main():
     print("LOADING FULL ZARR FILES")
     print("="*60)
     
-    train_x, train_y, val_x, val_y, test_x, test_y = load_full_zarr_files(
+    train_x, train_y, val_x, val_y, test_x, test_y, train_y_mask, val_y_mask, test_y_mask = load_full_zarr_files(
         zarr_dir, split_basin_dict, flight_to_basin,
         skip_tb_channels=True  # ← NEW PARAMETER
     )
     # ========================================
     # CONVERT TO PATCHES
     # ========================================
-    train_x, train_y, val_x, val_y, test_x, test_y = convert_to_patches(
+    train_x, train_y, val_x, val_y, test_x, test_y, train_y_mask_patched, val_y_mask_patched, test_y_mask_patched = convert_to_patches(
         train_x, train_y, val_x, val_y, test_x, test_y,
+        train_y_mask, val_y_mask, test_y_mask,
         patch_size=patch_size,
         stride=stride,
         min_valid_fraction=min_valid_fraction
@@ -847,13 +859,14 @@ def main():
     train_x_norm, val_x_norm, norm_mean, norm_std = normalize_dataset_per_channel(train_x, val_x, skip_channels=[1])
     
     # Normalize labels (Y) - same approach
+    IPython.embed()
     train_y_all = np.concatenate(train_y + val_y, axis=0)
     #y_mean = np.nanmean(train_y_all)
     #y_std = np.nanstd(train_y_all)
     #train_y_all = np.concatenate(train_y + val_y, axis=0)
 
     # Only compute stats on VALID (positive, non-NaN) values
-    valid_y = train_y_all[(train_y_all > 0) & (~np.isnan(train_y_all))]
+    valid_y = train_y_all[train_y_mask_patched] ## does this work?? #[(train_y_all > 0) & (~np.isnan(train_y_all))]
 
     if len(valid_y) == 0:
         print("  ERROR: No valid Y values found! All labels are 0 or NaN")
@@ -939,100 +952,114 @@ def main():
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
     
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
-    criterion = nn.MSELoss() #nn.L1Loss()
+    #criterion = nn.MSELoss() #nn.L1Loss()
+    class ValueWeightedMSELoss(nn.Module):
+    def __init__(self, alpha=1.0):
+        super().__init__()
+        self.alpha = alpha
+    
+    def forward(self, predictions, targets):
+        # Weight proportional to target value (higher SWE = higher weight)
+        weights = 1.0 + self.alpha * (targets / (targets.max() + 1e-8))
+        loss = (predictions - targets) ** 2
+        weighted_loss = loss * weights
+        return weighted_loss.mean()
+
+    criterion = ValueWeightedMSELoss(alpha=2.0)   
+
     scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-6)
     
-    
-    # Training loop
-    print("\n" + "="*60)
-    print("TRAINING")
-    print("="*60)
-    
-    train_losses = []
-    val_losses = []
-    best_val_loss = float('inf')
-    epochs_without_improvement = 0
-    
-    for epoch in range(1, num_epochs + 1):
-        print(f"\n--- Epoch {epoch}/{num_epochs} ---")
+    train_exp = True
+    if train_exp == True:
+        # Training loop
+        print("\n" + "="*60)
+        print("TRAINING")
+        print("="*60)
         
-        train_loss, _ = train_model(
-            model, train_loader, optimizer, criterion, device, epoch, batch_size= 2 #batch_size
-        )
+        train_losses = []
+        val_losses = []
+        best_val_loss = float('inf')
+        epochs_without_improvement = 0
         
-        val_loss, _ = validate_model(
-            model, val_loader, criterion, device, epoch
-        )
+        for epoch in range(1, num_epochs + 1):
+            print(f"\n--- Epoch {epoch}/{num_epochs} ---")
+            
+            train_loss, _ = train_model(
+                model, train_loader, optimizer, criterion, device, epoch, batch_size= 2 #batch_size
+            )
+            
+            val_loss, _ = validate_model(
+                model, val_loader, criterion, device, epoch
+            )
+            
+            train_losses.append(train_loss)
+            val_losses.append(val_loss)
+            scheduler.step()
+            
+            # Save best model
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                save_path = os.path.join(checkpoint_dir, 'best_model_cnn.pth')
+                torch.save(model.state_dict(), save_path)
+                print(f"  ✓ Saved best model (val_loss={val_loss:.6f})")
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
+            
+            # Early stopping
+            if epochs_without_improvement >= patience:
+                print(f"\nEarly stopping at epoch {epoch}")
+                break
         
-        train_losses.append(train_loss)
-        val_losses.append(val_loss)
-        scheduler.step()
+        # Plot loss curves
+        print("\n" + "="*60)
+        print("SAVING RESULTS")
+        print("="*60)
         
-        # Save best model
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            save_path = os.path.join(checkpoint_dir, 'best_model_cnn.pth')
-            torch.save(model.state_dict(), save_path)
-            print(f"  ✓ Saved best model (val_loss={val_loss:.6f})")
-            epochs_without_improvement = 0
-        else:
-            epochs_without_improvement += 1
+        plt.figure(figsize=(10, 6))
+        plt.plot(range(1, len(train_losses) + 1), train_losses, 'b-o', label='Train Loss', linewidth=2)
+        plt.plot(range(1, len(val_losses) + 1), val_losses, 'r-s', label='Val Loss', linewidth=2)
+        plt.xlabel('Epoch', fontsize=12)
+        plt.ylabel('L1 Loss', fontsize=12)
+        plt.title('Training and Validation Loss', fontsize=14, fontweight='bold')
+        plt.legend(fontsize=11)
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
         
-        # Early stopping
-        if epochs_without_improvement >= patience:
-            print(f"\nEarly stopping at epoch {epoch}")
-            break
-    
-    # Plot loss curves
-    print("\n" + "="*60)
-    print("SAVING RESULTS")
-    print("="*60)
-    
-    plt.figure(figsize=(10, 6))
-    plt.plot(range(1, len(train_losses) + 1), train_losses, 'b-o', label='Train Loss', linewidth=2)
-    plt.plot(range(1, len(val_losses) + 1), val_losses, 'r-s', label='Val Loss', linewidth=2)
-    plt.xlabel('Epoch', fontsize=12)
-    plt.ylabel('L1 Loss', fontsize=12)
-    plt.title('Training and Validation Loss', fontsize=14, fontweight='bold')
-    plt.legend(fontsize=11)
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    
-    plot_path = os.path.join(checkpoint_dir, 'loss_curve.png')
-    plt.savefig(plot_path, dpi=150)
-    print(f"Saved loss plot to {plot_path}")
-    
-    # Save loss values
-    loss_txt_path = os.path.join(checkpoint_dir, 'loss_values.txt')
-    with open(loss_txt_path, 'w') as f:
-        f.write("Epoch,Train_Loss,Val_Loss\n")
-        for i, (train_l, val_l) in enumerate(zip(train_losses, val_losses), 1):
-            f.write(f"{i},{train_l:.6f},{val_l:.6f}\n")
-    print(f"Saved loss values to {loss_txt_path}")
-    
-    # Save normalization stats for later use
-    norm_stats = {
-        'X_mean': norm_mean[0, :, 0, 0].tolist(),
-        'X_std': norm_std[0, :, 0, 0].tolist(),
-        'Y_mean': float(y_mean),
-        'Y_std': float(y_std)
-    }
-    
-    import json
-    stats_path = os.path.join(checkpoint_dir, 'normalization_stats.json')
-    with open(stats_path, 'w') as f:
-        json.dump(norm_stats, f, indent=2)
-    print(f"Saved normalization stats to {stats_path}")
-    
-    print("\n" + "="*60)
-    print("TRAINING COMPLETE")
-    print("="*60)
-    print(f"Best validation loss: {best_val_loss:.6f}")
-    print(f"Model saved to: {checkpoint_dir}/best_model_cnn.pth")
-
-
+        plot_path = os.path.join(checkpoint_dir, 'loss_curve.png')
+        plt.savefig(plot_path, dpi=150)
+        print(f"Saved loss plot to {plot_path}")
+        
+        # Save loss values
+        loss_txt_path = os.path.join(checkpoint_dir, 'loss_values.txt')
+        with open(loss_txt_path, 'w') as f:
+            f.write("Epoch,Train_Loss,Val_Loss\n")
+            for i, (train_l, val_l) in enumerate(zip(train_losses, val_losses), 1):
+                f.write(f"{i},{train_l:.6f},{val_l:.6f}\n")
+        print(f"Saved loss values to {loss_txt_path}")
+        
+        # Save normalization stats for later use
+        norm_stats = {
+            'X_mean': norm_mean[0, :, 0, 0].tolist(),
+            'X_std': norm_std[0, :, 0, 0].tolist(),
+            'Y_mean': float(y_mean),
+            'Y_std': float(y_std)
+        }
+        
+        import json
+        stats_path = os.path.join(checkpoint_dir, 'normalization_stats.json')
+        with open(stats_path, 'w') as f:
+            json.dump(norm_stats, f, indent=2)
+        print(f"Saved normalization stats to {stats_path}")
+        
+        print("\n" + "="*60)
+        print("TRAINING COMPLETE")
+        print("="*60)
+        print(f"Best validation loss: {best_val_loss:.6f}")
+        print(f"Model saved to: {checkpoint_dir}/best_model_cnn.pth")
 
 ##############
+## if just want the eval
     model.load_state_dict(torch.load(os.path.join(checkpoint_dir, 'best_model_cnn.pth')))
     
     # Normalize test data using same stats as train/val
