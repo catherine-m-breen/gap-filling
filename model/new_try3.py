@@ -780,7 +780,7 @@ def evaluate_test_set(model, test_x, test_y, test_mask, y_mean, y_std, device, c
             # Convert to torch and add batch dimension
             x_tensor = torch.from_numpy(x_patch).to(device, dtype=torch.float32)
             y_tensor = torch.from_numpy(y_patch).to(device, dtype=torch.float32)
-            y_mask = torch.from_numpy(y_mask).to(device, dtype=torch.bool)
+            y_mask_tensor = torch.from_numpy(y_mask).to(device, dtype=torch.bool)
             
             # Model expects (batch, C, H, W), data is (1, C, H, W)
             if x_tensor.shape[0] == 1:
