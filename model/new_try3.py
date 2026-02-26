@@ -99,7 +99,7 @@ class ASODataset(Dataset):
         print(f"  Created {len(self.patch_index)} patches from {len(data)} images")
 
     def __len__(self):
-        return len(self.patch_index)
+        return len(self.patch_index) 
 
     def __getitem__(self, idx):
         file_idx, row, col = self.patch_index[idx]
@@ -221,7 +221,7 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
             continue
 
         # L1 loss + L1 regularization
-        IPython.embed()
+        #IPython.embed()
         l1_lambda = 0.000001
         l1_norm = sum(p.abs().sum() for p in model.parameters())
         loss = criterion(output_masked, labels_masked) + l1_lambda * l1_norm
@@ -348,6 +348,20 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         if skip_tb_channels:
             channels_to_keep = [7]
             X = X[channels_to_keep, :, :]
+
+            # ========================================
+            # CREATE NaN MASK CHANNEL
+            # ========================================
+            # Create binary mask: 1 = valid data, 0 = NaN
+            nan_mask = (~np.isnan(X)).astype(np.float32)
+            
+            # Fill NaN in original data with 0 (or mean)
+            X_filled = np.nan_to_num(X, nan=0.0)
+            
+            # Stack data and mask as separate channels
+            # Result: (2, H, W) - channel 0 = data, channel 1 = mask
+            X = np.concatenate([X_filled, nan_mask], axis=0)
+
             if len(train_x) == 0:  # Only print once
                 print(f"  Removed TB channels, X shape: {X.shape[0]} channels")
         
@@ -446,7 +460,7 @@ def convert_to_patches(train_x, train_y, val_x, val_y, test_x, test_y,
         train_x, train_y, val_x, val_y, test_x, test_y: Lists of full images
         patch_size: Size of patches to extract
         stride: Stride for patch extraction
-        min_valid_fraction: Skip patches with <X% valid (non-zero) pixels in target
+        min_valid_fraction: Skip patches with <% valid (non-zero) pixels in target
     
     Returns:
         Patched versions of all inputs as lists
@@ -509,14 +523,62 @@ def convert_to_patches(train_x, train_y, val_x, val_y, test_x, test_y,
     
     return train_x_patched, train_y_patched, val_x_patched, val_y_patched, test_x_patched, test_y_patched
 
-def normalize_dataset_per_channel(train_data, val_data):
+# def normalize_dataset_per_channel(train_data, val_data):
+#     """
+#     Normalize train and val together using combined statistics.
+#     Works with full images and patches
+    
+#     Returns normalized train and val lists.
+#     """
+#     print("Computing normalization statistics from train+val combined...")
+    
+#     # Combine train and val for computing stats
+#     combined_data = train_data + val_data
+    
+#     # Stack all images
+#     all_data = np.concatenate(combined_data, axis=0)  # (N, C, H, W)
+    
+#     # Compute mean and std per channel
+#     # mean = np.mean(all_data, axis=(0, 2, 3), keepdims=True)  # (1, C, 1, 1)
+#     # std = np.std(all_data, axis=(0, 2, 3), keepdims=True)    # (1, C, 1, 1)
+#     mean = np.nanmean(all_data, axis=(0, 2, 3), keepdims=True)  # (1, C, 1, 1)
+#     std = np.nanstd(all_data, axis=(0, 2, 3), keepdims=True)    # (1, C, 1, 1)
+    
+    
+#     print(f"Channel means: {mean[0, :, 0, 0]}")
+#     print(f"Channel stds: {std[0, :, 0, 0]}")
+    
+#     # Normalize train
+#     normalized_train = []
+#     for data in train_data:
+#         normalized = (data - mean) / (std + 1e-7)
+#         normalized_train.append(normalized)
+    
+#     # Normalize val
+#     normalized_val = []
+#     for data in val_data:
+#         normalized = (data - mean) / (std + 1e-7)
+#         normalized_val.append(normalized)
+    
+#     return normalized_train, normalized_val, mean, std
+
+def normalize_dataset_per_channel(train_data, val_data, skip_channels=None):
     """
     Normalize train and val together using combined statistics.
-    Works with full images, not patches.
+    Works with full images and patches.
     
-    Returns normalized train and val lists.
+    Args:
+        train_data: List of training data arrays
+        val_data: List of validation data arrays
+        skip_channels: List of channel indices to skip normalization (e.g., [2] for mask)
+    
+    Returns:
+        normalized train and val lists, mean, std
     """
     print("Computing normalization statistics from train+val combined...")
+    
+    if skip_channels is None:
+        skip_channels = []
     
     # Combine train and val for computing stats
     combined_data = train_data + val_data
@@ -524,12 +586,30 @@ def normalize_dataset_per_channel(train_data, val_data):
     # Stack all images
     all_data = np.concatenate(combined_data, axis=0)  # (N, C, H, W)
     
-    # Compute mean and std per channel
-    # mean = np.mean(all_data, axis=(0, 2, 3), keepdims=True)  # (1, C, 1, 1)
-    # std = np.std(all_data, axis=(0, 2, 3), keepdims=True)    # (1, C, 1, 1)
-    mean = np.nanmean(all_data, axis=(0, 2, 3), keepdims=True)  # (1, C, 1, 1)
-    std = np.nanstd(all_data, axis=(0, 2, 3), keepdims=True)    # (1, C, 1, 1)
+    num_channels = all_data.shape[1]
     
+    # Compute mean and std per channel
+    mean = np.zeros((1, num_channels, 1, 1), dtype=np.float32)
+    std = np.ones((1, num_channels, 1, 1), dtype=np.float32)  # Default std=1 for skipped channels
+    
+    for ch in range(num_channels):
+        if ch in skip_channels:
+            # Don't normalize this channel (keep mean=0, std=1)
+            print(f"  Channel {ch}: SKIPPED (mask or binary channel)")
+            continue
+        
+        ch_data = all_data[:, ch, :, :]
+        mean[0, ch, 0, 0] = np.nanmean(ch_data)
+        std[0, ch, 0, 0] = np.nanstd(ch_data)
+        
+        # Handle edge cases
+        if np.isnan(mean[0, ch, 0, 0]):
+            print(f"  Channel {ch}: WARNING - all NaN, setting mean=0, std=1")
+            mean[0, ch, 0, 0] = 0.0
+            std[0, ch, 0, 0] = 1.0
+        elif std[0, ch, 0, 0] < 1e-7:
+            print(f"  Channel {ch}: WARNING - zero variance, setting std=1")
+            std[0, ch, 0, 0] = 1.0
     
     print(f"Channel means: {mean[0, :, 0, 0]}")
     print(f"Channel stds: {std[0, :, 0, 0]}")
@@ -549,6 +629,172 @@ def normalize_dataset_per_channel(train_data, val_data):
     return normalized_train, normalized_val, mean, std
 
 
+# +++++++++++
+# Add this function after validate_model():
+
+def evaluate_test_set(model, test_x, test_y, y_mean, y_std, device, checkpoint_dir):
+    """
+    Evaluate model on test set and create predicted vs actual plot.
+
+      test_results = evaluate_test_set(
+        model, 
+        test_x_norm, 
+        test_y_norm, 
+        y_mean, 
+        y_std, 
+        device, 
+        checkpoint_dir
+    )
+    
+    """
+    print("\n" + "="*60)
+    print("EVALUATING ON TEST SET")
+    print("="*60)
+    
+    model.eval()
+    all_preds = []
+    all_labels = []
+    
+    with torch.no_grad():
+        for i, (x_patch, y_patch) in enumerate(zip(test_x, test_y)):
+            # Convert to torch and add batch dimension
+            x_tensor = torch.from_numpy(x_patch).to(device, dtype=torch.float32)
+            y_tensor = torch.from_numpy(y_patch).to(device, dtype=torch.float32)
+            
+            # Model expects (batch, C, H, W), data is (1, C, H, W)
+            if x_tensor.shape[0] == 1:
+                x_tensor = x_tensor  # Already has batch dim
+            
+            # Get prediction
+            output = model(x_tensor)
+            
+            # Squeeze to match label shape
+            if len(y_tensor.shape) == 4 and y_tensor.shape[1] == 1:
+                y_tensor = y_tensor.squeeze(1)
+            
+            if len(output.shape) == 3 and output.shape[0] == 1:
+                output = output.squeeze(0)
+            
+            # Create mask for valid pixels
+            mask = (y_tensor > 0) & (~torch.isnan(y_tensor))
+            
+            # Extract valid pixels
+            IPython.embed() 
+            valid_preds = output[mask].cpu().numpy()
+            valid_labels = y_tensor[mask].cpu().numpy()
+            
+            all_preds.extend(valid_preds)
+            all_labels.extend(valid_labels)
+            
+            if (i + 1) % 100 == 0:
+                print(f"  Processed {i+1}/{len(test_x)} test patches...")
+    
+    all_preds = np.array(all_preds)
+    all_labels = np.array(all_labels)
+    
+    # Denormalize to get back to meters
+    preds_meters = all_preds * y_std + y_mean
+    labels_meters = all_labels * y_std + y_mean
+    
+    # Compute metrics
+    mae = mean_absolute_error(labels_meters, preds_meters)
+    rmse = np.sqrt(mean_squared_error(labels_meters, preds_meters))
+    r2 = r2_score(labels_meters, preds_meters)
+    
+    print(f"\nTest Set Metrics:")
+    print(f"  MAE:  {mae:.4f} m")
+    print(f"  RMSE: {rmse:.4f} m")
+    print(f"  R²:   {r2:.4f}")
+    print(f"  Valid pixels: {len(all_labels):,}")
+    
+    # Create scatter plot
+    fig, ax = plt.subplots(figsize=(10, 10))
+    
+    # Subsample if too many points for plotting
+    if len(preds_meters) > 50000:
+        indices = np.random.choice(len(preds_meters), 50000, replace=False)
+        plot_preds = preds_meters[indices]
+        plot_labels = labels_meters[indices]
+    else:
+        plot_preds = preds_meters
+        plot_labels = labels_meters
+    
+    # Hexbin plot for density
+    hexbin = ax.hexbin(plot_labels, plot_preds, gridsize=50, cmap='viridis', 
+                       mincnt=1, bins='log')
+    
+    # Add colorbar
+    cb = plt.colorbar(hexbin, ax=ax, label='Log10(Count)')
+    
+    # Add 1:1 line
+    max_val = max(plot_labels.max(), plot_preds.max())
+    min_val = min(plot_labels.min(), plot_preds.min())
+    ax.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, 
+            label='1:1 Line', alpha=0.8)
+    
+    # Labels and title
+    ax.set_xlabel('Actual SWE (m)', fontsize=14, fontweight='bold')
+    ax.set_ylabel('Predicted SWE (m)', fontsize=14, fontweight='bold')
+    ax.set_title(f'Test Set: Predicted vs Actual SWE\n'
+                 f'R² = {r2:.3f}, RMSE = {rmse:.3f} m, MAE = {mae:.3f} m',
+                 fontsize=16, fontweight='bold')
+    
+    # Add text box with stats
+    textstr = f'N = {len(all_labels):,}\nR² = {r2:.3f}\nRMSE = {rmse:.3f} m\nMAE = {mae:.3f} m'
+    props = dict(boxstyle='round', facecolor='white', alpha=0.8)
+    ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=12,
+            verticalalignment='top', bbox=props)
+    
+    ax.legend(fontsize=12, loc='lower right')
+    ax.grid(True, alpha=0.3)
+    ax.set_aspect('equal', adjustable='box')
+    
+    plt.tight_layout()
+    
+    # Save plot
+    plot_path = os.path.join(checkpoint_dir, 'test_predicted_vs_actual.png')
+    plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+    print(f"\nSaved test evaluation plot to {plot_path}")
+    
+    # Also create a residual plot
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    
+    # Residuals vs actual
+    residuals = preds_meters - labels_meters
+    axes[0].hexbin(plot_labels, residuals[indices] if len(preds_meters) > 50000 else residuals,
+                   gridsize=50, cmap='RdBu_r', mincnt=1)
+    axes[0].axhline(y=0, color='k', linestyle='--', linewidth=2)
+    axes[0].set_xlabel('Actual SWE (m)', fontsize=12, fontweight='bold')
+    axes[0].set_ylabel('Residual (Predicted - Actual) (m)', fontsize=12, fontweight='bold')
+    axes[0].set_title('Residual Plot', fontsize=14, fontweight='bold')
+    axes[0].grid(True, alpha=0.3)
+    
+    # Histogram of residuals
+    axes[1].hist(residuals, bins=100, edgecolor='black', alpha=0.7)
+    axes[1].axvline(x=0, color='r', linestyle='--', linewidth=2, label='Zero')
+    axes[1].axvline(x=np.mean(residuals), color='g', linestyle='--', linewidth=2, 
+                    label=f'Mean = {np.mean(residuals):.3f} m')
+    axes[1].set_xlabel('Residual (m)', fontsize=12, fontweight='bold')
+    axes[1].set_ylabel('Frequency', fontsize=12, fontweight='bold')
+    axes[1].set_title('Residual Distribution', fontsize=14, fontweight='bold')
+    axes[1].legend(fontsize=10)
+    axes[1].grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    residual_path = os.path.join(checkpoint_dir, 'test_residuals.png')
+    plt.savefig(residual_path, dpi=150, bbox_inches='tight')
+    print(f"Saved residual plots to {residual_path}")
+    
+    return {
+        'mae': mae,
+        'rmse': rmse,
+        'r2': r2,
+        'n_pixels': len(all_labels),
+        'preds': preds_meters,
+        'actuals': labels_meters
+    }
+#+++++++++++++++
+
 # ============================================================
 # Main Training Script
 # ============================================================
@@ -559,7 +805,7 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
     #IPython.embed()
-    num_epochs = 10 #1000
+    num_epochs = 20 #10 #1000
     batch_size = 16
     learning_rate = 1e-4 #0.01
     patience = 20 #400
@@ -569,7 +815,7 @@ def main():
     stride = 64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./checkpoints"
+    checkpoint_dir = "./checkpoints_new"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
@@ -596,13 +842,13 @@ def main():
     print("NORMALIZING DATA")
     print("="*60)
     
-    train_x_norm, val_x_norm, norm_mean, norm_std = normalize_dataset_per_channel(train_x, val_x)
+    train_x_norm, val_x_norm, norm_mean, norm_std = normalize_dataset_per_channel(train_x, val_x, skip_channels=[1])
     
     # Normalize labels (Y) - same approach
     train_y_all = np.concatenate(train_y + val_y, axis=0)
     #y_mean = np.nanmean(train_y_all)
     #y_std = np.nanstd(train_y_all)
-    train_y_all = np.concatenate(train_y + val_y, axis=0)
+    #train_y_all = np.concatenate(train_y + val_y, axis=0)
 
     # Only compute stats on VALID (positive, non-NaN) values
     valid_y = train_y_all[(train_y_all > 0) & (~np.isnan(train_y_all))]
@@ -659,7 +905,7 @@ def main():
             self.labels = labels
         
         def __len__(self):
-            return len(self.data) // 2
+            return len(self.data) #// 150
         
         def __getitem__(self, idx):
             # Data already patched, just return
@@ -709,7 +955,7 @@ def main():
         print(f"\n--- Epoch {epoch}/{num_epochs} ---")
         
         train_loss, _ = train_model(
-            model, train_loader, optimizer, criterion, device, epoch, batch_size=batch_size
+            model, train_loader, optimizer, criterion, device, epoch, batch_size= 2 #batch_size
         )
         
         val_loss, _ = validate_model(
@@ -781,6 +1027,57 @@ def main():
     print("="*60)
     print(f"Best validation loss: {best_val_loss:.6f}")
     print(f"Model saved to: {checkpoint_dir}/best_model_cnn.pth")
+
+
+
+##############
+    model.load_state_dict(torch.load(os.path.join(checkpoint_dir, 'best_model_cnn.pth')))
+    
+    # Normalize test data using same stats as train/val
+    print("\nNormalizing test data...")
+    test_x_norm = []
+    for data in test_x:
+        normalized = (data - norm_mean) / (norm_std + 1e-7)
+        test_x_norm.append(normalized)
+    
+    test_y_norm = [(y - y_mean) / (y_std + 1e-7) for y in test_y]
+    
+    # Evaluate on test set
+    test_results = evaluate_test_set(
+        model, 
+        test_x_norm, 
+        test_y_norm, 
+        y_mean, 
+        y_std, 
+        device, 
+        checkpoint_dir
+    )
+    
+    # Save test metrics
+    test_metrics = {
+        'mae_m': float(test_results['mae']),
+        'rmse_m': float(test_results['rmse']),
+        'r2': float(test_results['r2']),
+        'n_pixels': int(test_results['n_pixels'])
+    }
+    
+    with open(os.path.join(checkpoint_dir, 'test_metrics.json'), 'w') as f:
+        json.dump(test_metrics, f, indent=2)
+    
+    print("\n" + "="*60)
+    print("ALL COMPLETE!")
+    print("="*60)
+
+
+
+
+
+
+
+
+
+
+##################
 
 
 if __name__ == '__main__':
