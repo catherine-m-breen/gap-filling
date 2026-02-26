@@ -329,6 +329,82 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict):
     return train_x, train_y, val_x, val_y, test_x, test_y
 
 
+# ============================================================
+# Patch Conversion Function
+# ============================================================
+
+def convert_to_patches(train_x, train_y, val_x, val_y, test_x, test_y, 
+                      patch_size=128, stride=64, min_valid_fraction=0.3):
+    """
+    Convert full images to patches for all splits.
+    
+    Args:
+        train_x, train_y, val_x, val_y, test_x, test_y: Lists of full images
+        patch_size: Size of patches to extract
+        stride: Stride for patch extraction
+        min_valid_fraction: Skip patches with <X% valid (non-zero) pixels in target
+    
+    Returns:
+        Patched versions of all inputs as lists
+    """
+    print("\n" + "="*60)
+    print("CONVERTING TO PATCHES")
+    print("="*60)
+    
+    def extract_patches_from_list(data_list, label_list, split_name):
+        """Extract patches from a list of images."""
+        patched_data = []
+        patched_labels = []
+        total_patches = 0
+        skipped_patches = 0
+        
+        print(f"\n{split_name} split:")
+        for img_idx, (data, label) in enumerate(zip(data_list, label_list)):
+            _, C, H, W = data.shape
+            _, _, H_y, W_y = label.shape
+            
+            img_patches = 0
+            
+            for row in range(0, H - patch_size + 1, stride):
+                for col in range(0, W - patch_size + 1, stride):
+                    # Extract patch
+                    data_patch = data[:, :, row:row+patch_size, col:col+patch_size]
+                    label_patch = label[:, :, row:row+patch_size, col:col+patch_size]
+                    
+                    # Quality filter: skip patches with too many invalid pixels
+                    valid_pixels = (label_patch != 0) & (~np.isnan(label_patch))
+                    valid_fraction = valid_pixels.sum() / label_patch.size
+                    
+                    if valid_fraction < min_valid_fraction:
+                        skipped_patches += 1
+                        continue
+                    
+                    patched_data.append(data_patch)
+                    patched_labels.append(label_patch)
+                    img_patches += 1
+                    total_patches += 1
+            
+            if (img_idx + 1) % 10 == 0 or img_idx == len(data_list) - 1:
+                print(f"  Processed {img_idx + 1}/{len(data_list)} images, "
+                      f"{total_patches} patches created, {skipped_patches} skipped")
+        
+        print(f"  Total {split_name}: {total_patches} patches from {len(data_list)} images")
+        return patched_data, patched_labels
+    
+    # Convert each split
+    train_x_patched, train_y_patched = extract_patches_from_list(train_x, train_y, "TRAIN")
+    val_x_patched, val_y_patched = extract_patches_from_list(val_x, val_y, "VAL")
+    test_x_patched, test_y_patched = extract_patches_from_list(test_x, test_y, "TEST")
+    
+    print(f"\n{'='*60}")
+    print(f"PATCHING COMPLETE")
+    print(f"  Train: {len(train_x_patched)} patches")
+    print(f"  Val:   {len(val_x_patched)} patches")
+    print(f"  Test:  {len(test_x_patched)} patches")
+    print(f"{'='*60}\n")
+    
+    return train_x_patched, train_y_patched, val_x_patched, val_y_patched, test_x_patched, test_y_patched
+
 def normalize_dataset_per_channel(train_data, val_data):
     """
     Normalize train and val together using combined statistics.
@@ -369,10 +445,9 @@ def normalize_dataset_per_channel(train_data, val_data):
 # ============================================================
 # Main Training Script
 # ============================================================
-
 def main():
     # Config
-    zarr_dir = "/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks"  # ← FULL zarr files, not patches
+    zarr_dir = "/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks"
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
     num_epochs = 1000
@@ -383,6 +458,7 @@ def main():
     # Patching config
     patch_size = 128
     stride = 64  # 50% overlap
+    min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
     checkpoint_dir = "./checkpoints"
     os.makedirs(checkpoint_dir, exist_ok=True)
@@ -394,6 +470,16 @@ def main():
     
     train_x, train_y, val_x, val_y, test_x, test_y = load_full_zarr_files(
         zarr_dir, split_basin_dict, flight_to_basin
+    )
+    
+    # ========================================
+    # CONVERT TO PATCHES
+    # ========================================
+    train_x, train_y, val_x, val_y, test_x, test_y = convert_to_patches(
+        train_x, train_y, val_x, val_y, test_x, test_y,
+        patch_size=patch_size,
+        stride=stride,
+        min_valid_fraction=min_valid_fraction
     )
     
     # Normalize train and val together
@@ -428,7 +514,7 @@ def main():
         x_flip, y_flip = random_flip(x, y)
         
         # Apply noise to X only (not Y)
-        x_noisy = add_gaussian_noise(x_flip, mean=0, sigma=0.1)  # Normalized scale
+        x_noisy = add_gaussian_noise(x_flip, mean=0, sigma=0.1)
         
         augmented_x.append(x_noisy)
         augmented_y.append(y_flip)
@@ -437,30 +523,30 @@ def main():
     combined_train_x = train_x_norm + augmented_x
     combined_train_y = train_y_norm + augmented_y
     
-    print(f"Training images: {len(train_x_norm)} original + {len(augmented_x)} augmented = {len(combined_train_x)} total")
+    print(f"Training patches: {len(train_x_norm)} original + {len(augmented_x)} augmented = {len(combined_train_x)} total")
     
-    # Create datasets WITH PATCHING
-    print("\n" + "="*60)
-    print("CREATING PATCH DATASETS")
-    print("="*60)
+    # ========================================
+    # SIMPLIFIED DATASET (NO MORE PATCHING NEEDED!)
+    # ========================================
+    class SimpleDataset(Dataset):
+        def __init__(self, data, labels):
+            self.data = data
+            self.labels = labels
+        
+        def __len__(self):
+            return len(self.data)
+        
+        def __getitem__(self, idx):
+            # Data already patched, just return
+            # Remove batch dimension: (1, C, H, W) -> (C, H, W)
+            return self.data[idx][0], self.labels[idx][0]
     
-    print("Training set:")
-    train_dataset = ASODataset(
-        combined_train_x, 
-        combined_train_y, 
-        patch_size=patch_size,
-        stride=stride,
-        augment=False
-    )
+    train_dataset = SimpleDataset(combined_train_x, combined_train_y)
+    val_dataset = SimpleDataset(val_x_norm, val_y_norm)
     
-    print("Validation set:")
-    val_dataset = ASODataset(
-        val_x_norm, 
-        val_y_norm, 
-        patch_size=patch_size,
-        stride=stride,
-        augment=False
-    )
+    print(f"\nDataset sizes:")
+    print(f"  Train: {len(train_dataset)} patches")
+    print(f"  Val:   {len(val_dataset)} patches")
     
     train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=4)
@@ -470,9 +556,9 @@ def main():
     print("INITIALIZING MODEL")
     print("="*60)
     
-    # Auto-detect number of channels from first sample
-    first_sample = train_x_norm[0]
-    input_channels = first_sample.shape[1]  # (1, C, H, W) -> C
+    # Auto-detect number of channels from first patch
+    first_patch = train_x_norm[0]
+    input_channels = first_patch.shape[1]  # (1, C, H, W) -> C
     
     print(f"Detected {input_channels} input channels")
     model = Model(input_channels=input_channels).to(device)
@@ -482,6 +568,7 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
     criterion = nn.L1Loss()
     scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=0.0001)
+    
     
     # Training loop
     print("\n" + "="*60)
