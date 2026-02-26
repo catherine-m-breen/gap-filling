@@ -16,7 +16,7 @@ import os
 from pathlib import Path
 import zarr
 from dictionaries import split_basin_dict, flight_to_basin
-
+import IPython
 print('Starting training script...')
 
 # ============================================================
@@ -131,7 +131,7 @@ class ASODataset(Dataset):
             label_patch = combined[num_data_channels:num_data_channels+num_label_channels, :, :]
             label_mask = combined[num_data_channels+num_label_channels:, :, :]
             
-        return data_patch, label_patch, label_mask
+        return data_patch, label_patch #, label_mask
 
 # ============================================================
 # Model (2D CNN like original script)
@@ -188,7 +188,7 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
     all_preds = []
     all_labels = []
 
-    for i, (features, labels, labels_masks) in enumerate(dataloader):
+    for i, (features, labels) in enumerate(dataloader):
         features = features.to(device, dtype=torch.float32)
         labels = labels.to(device, dtype=torch.float32)
         ## this is redundant
@@ -221,6 +221,7 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
             continue
 
         # L1 loss + L1 regularization
+        IPython.embed()
         l1_lambda = 0.000001
         l1_norm = sum(p.abs().sum() for p in model.parameters())
         loss = criterion(output_masked, labels_masked) + l1_lambda * l1_norm
