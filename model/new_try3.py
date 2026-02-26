@@ -984,7 +984,7 @@ def main():
     stride = int(patch_size/ 2) #64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./checkpoints_elevation_MSELoss_1e-3_150_ps256_L1Smooth"
+    checkpoint_dir = "./checkpoints_elevation_1e-3_150_ps256_weightedL1smooth_w2"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
@@ -1105,7 +1105,7 @@ def main():
             self.masks = labels_masks
         
         def __len__(self):
-            return len(self.data) // 150
+            return len(self.data) #150
         
         def __getitem__(self, idx):
             # Data already patched, just return
@@ -1139,7 +1139,7 @@ def main():
     
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
     #criterion = nn.SmoothL1Loss(beta=1.0) #nn.MSELoss() #nn.L1Loss()
-    criterion = WeightedSmoothL1Loss(beta=1.0, weight_power=1.0)
+    criterion = WeightedSmoothL1Loss(beta=1.0, weight_power=2.0)
     # class ValueWeightedMSELoss(nn.Module):
     #     def __init__(self, alpha=1.0):
     #         super().__init__()
