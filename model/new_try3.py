@@ -928,7 +928,7 @@ def main():
     #IPython.embed()
     num_epochs = 40 #10 #1000
     batch_size = 16
-    learning_rate = 1e-5 #0.01 ### learning rate start it really small? it will take longer to learn though 
+    learning_rate = 1e-6 #0.01 ### learning rate start it really small? it will take longer to learn though 
     patience = 30 #400
     
     # Patching config
@@ -1048,7 +1048,7 @@ def main():
             self.masks = labels_masks
         
         def __len__(self):
-            return len(self.data) #// 150
+            return len(self.data) // 150
         
         def __getitem__(self, idx):
             # Data already patched, just return
