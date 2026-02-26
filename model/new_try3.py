@@ -257,12 +257,12 @@ def validate_model(model, dataloader, criterion, device, epoch):
 # Data Loading Functions - LOAD FULL ZARR FILES
 # ============================================================
 
-def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict):
+def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_channels=True):
     """
     Load FULL zarr files (not patches) and organize by train/val/test split.
-    Patching will happen in the Dataset class on-the-fly.
     
-    Returns: train_data, train_labels, val_data, val_labels, test_data, test_labels
+    Args:
+        skip_tb_channels: If True, remove brightness temperature channels (4-7)
     """
     zarr_dir = Path(zarr_dir)
     zarr_files = sorted(zarr_dir.glob("*.zarr"))
@@ -300,6 +300,24 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict):
         X = np.array(z['X'], dtype=np.float32)  # (C, H, W) - full image
         Y = np.array(z['Y'], dtype=np.float32)  # (1, H, W) - full label
         
+        # ========================================
+        # SKIP BRIGHTNESS TEMPERATURE CHANNELS
+        # ========================================
+        if skip_tb_channels:
+            # Original channels:
+            # 0: snow_class
+            # 1: landcover
+            # 2: canopy_cover
+            # 3: elevation
+            # 4-7: TB channels (37H, 37V, 19H, 19V) <- SKIP THESE
+            # 8: NDSI
+            # 9-10: masks
+            
+            # Keep channels [0, 1, 2, 3, 8, 9, 10] - skip [4, 5, 6, 7]
+            channels_to_keep = [8] #[0, 1, 2, 3, 8, 9, 10]
+            X = X[channels_to_keep, :, :]
+            print(f"  Removed TB channels, X shape: {X.shape[0]} channels")
+        
         # Handle invalid values
         X[X == -9999] = 0.0
         X[X == 9999] = 0.0
@@ -311,7 +329,8 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict):
         X = X[None, :, :, :]
         Y = Y[None, :, :, :]
         
-        print(f"  Loaded {flight_id} ({basin}, {split}): X={X.shape}, Y={Y.shape}")
+        if len(train_x) == 0:  # Only print once
+            print(f"  Loaded {flight_id} ({basin}, {split}): X={X.shape}, Y={Y.shape}")
         
         # Assign to split
         if split == 'train':
@@ -327,7 +346,6 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict):
     print(f"\nLoaded: {len(train_x)} train, {len(val_x)} val, {len(test_x)} test FULL images")
     
     return train_x, train_y, val_x, val_y, test_x, test_y
-
 
 # ============================================================
 # Patch Conversion Function
@@ -469,9 +487,9 @@ def main():
     print("="*60)
     
     train_x, train_y, val_x, val_y, test_x, test_y = load_full_zarr_files(
-        zarr_dir, split_basin_dict, flight_to_basin
+        zarr_dir, split_basin_dict, flight_to_basin,
+        skip_tb_channels=True  # ← NEW PARAMETER
     )
-    
     # ========================================
     # CONVERT TO PATCHES
     # ========================================
