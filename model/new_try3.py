@@ -60,9 +60,14 @@ def random_flip(data, labels, masks):
 def add_gaussian_noise(image, mean=0, sigma=25):
     """Add Gaussian noise to image."""
     _, ch, row, col = image.shape
-    noisy = np.zeros_like(image)
-    gauss = np.random.normal(mean, sigma, (1, ch, row, col))
-    noisy = image + gauss
+    channel = 0
+    #noisy = np.zeros_like(image)
+    noisy = image.copy()  ## WE NEED IT TO COPY THE IMAGE NOT MAKE ZEROS OR ELSE WE LOSE ALL THE DATA!!
+    gauss = np.random.normal(mean, sigma, (1, 1, row, col))
+    noisy[:, channel:channel+1, :, :] = image[:, channel:channel+1, :, :] + gauss
+
+    # gauss = np.random.normal(mean, sigma, (1, ch, row, col))
+    # noisy = image + gauss
     return np.clip(noisy, 0, 255).astype(np.float32)
 
 
@@ -259,6 +264,7 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
 
     first_batch = True 
     for i, (features, labels, masks) in enumerate(dataloader):
+        ## labels aren't normalized here??
         features = features.to(device, dtype=torch.float32)
         labels = labels.to(device, dtype=torch.float32)
         masks = masks.to(device, dtype=torch.bool) ## keep as boolean
@@ -292,6 +298,7 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
         #IPython.embed()
         "Saving Image...."
         if (epoch % 5) & first_batch:
+            ## labels aren't normalized weirdly??
             save_first_batch_viz(features, labels, output, masks, epoch, save_dir)
             first_batch = False
         # Skip if no valid pixels
@@ -969,6 +976,7 @@ def main():
     print(f"  Mean: {y_mean:.4f} m")
     print(f"  Std: {y_std:.4f} m")
     
+    ########### I think something is breaking here??? because the mean and std are soooo small ########
     train_y_norm = [(y - y_mean) / (y_std + 1e-7) for y in train_y]
     val_y_norm = [(y - y_mean) / (y_std + 1e-7) for y in val_y]
     
@@ -992,7 +1000,7 @@ def main():
         x_flip, y_flip, y_mask_flip = random_flip(x, y, z)
         
         # Apply noise to X only (not Y)
-        x_noisy = add_gaussian_noise(x_flip[0], mean=0, sigma=0.1) ## just do the first channel
+        x_noisy = add_gaussian_noise(x_flip, mean=0, sigma=0.1) ## just do the first channel
         
         augmented_x.append(x_noisy)
         augmented_y.append(y_flip)
@@ -1000,6 +1008,7 @@ def main():
 
     # Combine original + augmented
     combined_train_x = train_x_norm + augmented_x
+    ## somehow combined trained y aren't normalized??
     combined_train_y = train_y_norm + augmented_y
     combined_train_y_mask = train_y_mask_patched + augmented_y_masks
     
@@ -1029,6 +1038,7 @@ def main():
     print(f"  Train: {len(train_dataset)} patches")
     print(f"  Val:   {len(val_dataset)} patches")
     
+    ### fyi that labels in the dataset AREN'T NORMALIZED ####
     train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=4)
     
