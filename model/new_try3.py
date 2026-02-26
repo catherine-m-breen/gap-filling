@@ -190,7 +190,7 @@ class Model(nn.Module):
 # Training and Validation Functions
 # ============================================================
 
-def save_first_batch_viz(features, labels, predictions, masks, epoch, save_dir, flight, patch):
+def save_first_batch_viz(features, labels, predictions, masks, epoch, save_dir):
     """
     Save visualizations of first batch item: input channels, target, prediction, mask
     
@@ -563,6 +563,7 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
 # ============================================================
 
 def convert_to_patches(train_x, train_y, val_x, val_y, test_x, test_y, train_y_mask, val_y_mask, test_y_mask,
+                       filenames_train, filenames_val, filenames_test,
                       patch_size=128, stride=64, min_valid_fraction=0.3):
     """
     Convert full images to patches for all splits.
@@ -580,16 +581,18 @@ def convert_to_patches(train_x, train_y, val_x, val_y, test_x, test_y, train_y_m
     print("CONVERTING TO PATCHES")
     print("="*60)
     
-    def extract_patches_from_list(data_list, label_list, mask_list, split_name):
+    def extract_patches_from_list(data_list, label_list, mask_list, filenames, split_name):
         """Extract patches from a list of images."""
         patched_data = []
         patched_labels = []
         patched_masks = []
+        patched_filenames = []
+        patched_loc = []
         total_patches = 0
         skipped_patches = 0
         
         print(f"\n{split_name} split:")
-        for img_idx, (data, label, mask) in enumerate(zip(data_list, label_list, mask_list)):
+        for img_idx, (data, label, mask, filename) in enumerate(zip(data_list, label_list, mask_list, filenames)):
             _, C, H, W = data.shape
             _, _, H_y, W_y = label.shape
             
@@ -612,6 +615,8 @@ def convert_to_patches(train_x, train_y, val_x, val_y, test_x, test_y, train_y_m
                     patched_data.append(data_patch)
                     patched_labels.append(label_patch)
                     patched_masks.append(mask_patch)
+                    patched_filenames.append(filename)
+                    patched_loc.append([row,col])
                     img_patches += 1
                     total_patches += 1
             
@@ -620,12 +625,12 @@ def convert_to_patches(train_x, train_y, val_x, val_y, test_x, test_y, train_y_m
                       f"{total_patches} patches created, {skipped_patches} skipped")
         
         print(f"  Total {split_name}: {total_patches} patches from {len(data_list)} images and {len(mask_list)} masks")
-        return patched_data, patched_labels, patched_masks
+        return patched_data, patched_labels, patched_masks, patched_filenames, patched_loc
     
     # Convert each split
-    train_x_patched, train_y_patched, train_y_mask_patched = extract_patches_from_list(train_x, train_y, train_y_mask, "TRAIN")
-    val_x_patched, val_y_patched, val_y_mask_patched = extract_patches_from_list(val_x, val_y, val_y_mask, "VAL")
-    test_x_patched, test_y_patched, test_y_mask_patched = extract_patches_from_list(test_x, test_y, test_y_mask, "TEST")
+    train_x_patched, train_y_patched, train_y_mask_patched, train_filenames, train_patch_loc  = extract_patches_from_list(train_x, train_y, train_y_mask, filenames_train, "TRAIN")
+    val_x_patched, val_y_patched, val_y_mask_patched, val_filenames, val_patch_loc, = extract_patches_from_list(val_x, val_y, val_y_mask, filenames_val, "VAL")
+    test_x_patched, test_y_patched, test_y_mask_patched, test_filenames, test_patch_loc, = extract_patches_from_list(test_x, test_y, test_y_mask, filenames_test, "TEST")
     
     print(f"\n{'='*60}")
     print(f"PATCHING COMPLETE")
@@ -634,7 +639,8 @@ def convert_to_patches(train_x, train_y, val_x, val_y, test_x, test_y, train_y_m
     print(f"  Test:  {len(test_x_patched)} patches")
     print(f"{'='*60}\n")
     
-    return train_x_patched, train_y_patched, val_x_patched, val_y_patched, test_x_patched, test_y_patched, train_y_mask_patched, val_y_mask_patched, test_y_mask_patched
+    return train_x_patched, train_y_patched, val_x_patched, val_y_patched, test_x_patched, test_y_patched, train_y_mask_patched, \
+        val_y_mask_patched, test_y_mask_patched, train_filenames, train_patch_loc, val_filenames, val_patch_loc, test_filenames, test_patch_loc
 
 # def normalize_dataset_per_channel(train_data, val_data):
 #     """
@@ -945,9 +951,10 @@ def main():
     # ========================================
     # CONVERT TO PATCHES
     # ========================================
-    train_x, train_y, val_x, val_y, test_x, test_y, train_y_mask_patched, val_y_mask_patched, test_y_mask_patched = convert_to_patches(
+    train_x, train_y, val_x, val_y, test_x, test_y, train_y_mask_patched, val_y_mask_patched, test_y_mask_patched, train_filenames, train_patch_loc, val_filenames, val_patch_loc, test_filenames, test_patch_loc = convert_to_patches(
         train_x, train_y, val_x, val_y, test_x, test_y,
         train_y_mask, val_y_mask, test_y_mask,
+        filenames_train, filenames_val, filenames_test,
         patch_size=patch_size,
         stride=stride,
         min_valid_fraction=min_valid_fraction
@@ -1182,12 +1189,14 @@ def main():
     
     # Normalize test data using same stats as train/val
     print("\nNormalizing test data...")
+    #### right now just using the train data ...... becuase it should overfit
+    ###### need to add the mask ######
     test_x_norm = []
     for data in train_x:
         normalized = (data - norm_mean) / (norm_std + 1e-7)
         test_x_norm.append(normalized)
     
-    test_y_norm = [(y - y_mean) / (y_std + 1e-7) for y in test_y]
+    test_y_norm = [(y - y_mean) / (y_std + 1e-7) for y in train_y]
     
     # Evaluate on test set
     test_results = evaluate_test_set(
