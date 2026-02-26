@@ -188,9 +188,10 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
     all_preds = []
     all_labels = []
 
-    for i, (features, labels) in enumerate(dataloader):
+    for i, (features, labels, masks) in enumerate(dataloader):
         features = features.to(device, dtype=torch.float32)
         labels = labels.to(device, dtype=torch.float32)
+        masks = masks.to(device, dtype=torch.bool) ## keep as boolean
         ## this is redundant
         #labels_masks = labels_masks.to(device, dtype=torch.float32)
 
@@ -206,12 +207,12 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
             labels = labels.squeeze(1)  # (batch, 1, H, W) -> (batch, H, W)
         
         # Mask: only compute loss on valid pixels (non-zero)
-        mask = (labels != 0) & (~torch.isnan(labels)) & (labels >= 0) ## no negative values either 
+        #mask = (labels != 0) & (~torch.isnan(labels)) & (labels >= 0) ## no negative values either 
         
         # Flatten for loss computation
         labels_flat = labels.reshape(-1)
         output_flat = output.reshape(-1)
-        mask_flat = mask.reshape(-1)
+        mask_flat = masks.reshape(-1) ## use the mask that was create at the beginning
         
         labels_masked = labels_flat[mask_flat]
         output_masked = output_flat[mask_flat]
@@ -224,7 +225,7 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
         #IPython.embed()
         l1_lambda = 0.000001
         l1_norm = sum(p.abs().sum() for p in model.parameters())
-        loss = criterion(output_masked, labels_masked) + l1_lambda * l1_norm
+        loss = criterion(output_masked, labels_masked, mask_flat) + l1_lambda * l1_norm
 
         loss.backward()
         total_loss += loss.item()
@@ -255,9 +256,10 @@ def validate_model(model, dataloader, criterion, device, epoch):
     all_labels = []
 
     with torch.no_grad():
-        for i, (features, labels) in enumerate(dataloader):
+        for i, (features, labels, masks) in enumerate(dataloader):
             features = features.to(device, dtype=torch.float32)
             labels = labels.to(device, dtype=torch.float32)
+            masks = masks.to(device, dtype=torch.bool) ## keep as boolean
 
             if features.shape[2] < 2 or features.shape[3] < 2:
                 continue
@@ -269,12 +271,12 @@ def validate_model(model, dataloader, criterion, device, epoch):
                 labels = labels.squeeze(1)  # (batch, 1, H, W) -> (batch, H, W)
             
             # Mask: only compute loss on valid pixels
-            mask = (labels != 0) & (~torch.isnan(labels)) & (labels >= 0) ## no negative values either 
+            #mask = (labels != 0) & (~torch.isnan(labels)) & (labels >= 0) ## no negative values either 
             
             # Flatten for loss computation
             labels_flat = labels.reshape(-1)
             output_flat = output.reshape(-1)
-            mask_flat = mask.reshape(-1)
+            mask_flat = masks.reshape(-1)
             
             labels_masked = labels_flat[mask_flat]
             output_masked = output_flat[mask_flat]
@@ -282,7 +284,7 @@ def validate_model(model, dataloader, criterion, device, epoch):
             if len(labels_masked) == 0:
                 continue
 
-            loss = criterion(output_masked, labels_masked)
+            loss = criterion(output_masked, labels_masked, mask_flat)
             total_loss += loss.item()
 
             all_preds.extend(output_masked.detach().cpu().numpy())
@@ -820,7 +822,7 @@ def main():
     #IPython.embed()
     num_epochs = 100 #10 #1000
     batch_size = 16
-    learning_rate = 1e-5 #0.01
+    learning_rate = 1e-5 #0.01 ### learning rate start it really small? it will take longer to learn though 
     patience = 20 #400
     
     # Patching config
@@ -859,14 +861,16 @@ def main():
     train_x_norm, val_x_norm, norm_mean, norm_std = normalize_dataset_per_channel(train_x, val_x, skip_channels=[1])
     
     # Normalize labels (Y) - same approach
-    IPython.embed()
+    #IPython.embed()
     train_y_all = np.concatenate(train_y + val_y, axis=0)
+    train_y_all_masks = np.concatenate(train_y_mask_patched + val_y_mask_patched, axis=0)
     #y_mean = np.nanmean(train_y_all)
     #y_std = np.nanstd(train_y_all)
     #train_y_all = np.concatenate(train_y + val_y, axis=0)
 
     # Only compute stats on VALID (positive, non-NaN) values
-    valid_y = train_y_all[train_y_mask_patched] ## does this work?? #[(train_y_all > 0) & (~np.isnan(train_y_all))]
+    #valid_y = train_y_all[(train_y_all > 0) & (~np.isnan(train_y_all))]
+    valid_y = train_y_all[train_y_all_masks] ## does this work?? #[(train_y_all > 0) & (~np.isnan(train_y_all))]
 
     if len(valid_y) == 0:
         print("  ERROR: No valid Y values found! All labels are 0 or NaN")
@@ -887,6 +891,11 @@ def main():
     train_y_norm = [(y - y_mean) / (y_std + 1e-7) for y in train_y]
     val_y_norm = [(y - y_mean) / (y_std + 1e-7) for y in val_y]
     
+    ## these are the masks for each dataset ##
+    train_y_mask_patched
+    val_y_mask_patched
+    #####################
+    
     # Data augmentation for training set
     print("\n" + "="*60)
     print("AUGMENTING TRAINING DATA")
@@ -894,20 +903,24 @@ def main():
     
     augmented_x = []
     augmented_y = []
+    augmented_y_masks = []
     
-    for x, y in zip(train_x_norm, train_y_norm):
+    ############# this is all data, even where we have the masks !! #############
+    for x, y, z in zip(train_x_norm, train_y_norm, train_y_mask_patched):
         # Apply flip
-        x_flip, y_flip = random_flip(x, y)
+        x_flip, y_flip, y_mask_flip = random_flip(x, y, z)
         
         # Apply noise to X only (not Y)
         x_noisy = add_gaussian_noise(x_flip, mean=0, sigma=0.1)
         
         augmented_x.append(x_noisy)
         augmented_y.append(y_flip)
-    
+        augmented_y_masks.append(y_mask_flip)
+
     # Combine original + augmented
     combined_train_x = train_x_norm + augmented_x
     combined_train_y = train_y_norm + augmented_y
+    combined_train_y_mask = train_y_mask_patched + augmented_y_masks
     
     print(f"Training patches: {len(train_x_norm)} original + {len(augmented_x)} augmented = {len(combined_train_x)} total")
     
@@ -915,9 +928,10 @@ def main():
     # SIMPLIFIED DATASET (NO MORE PATCHING NEEDED!)
     # ========================================
     class SimpleDataset(Dataset):
-        def __init__(self, data, labels):
+        def __init__(self, data, labels, labels_masks):
             self.data = data
             self.labels = labels
+            self.masks = labels_masks
         
         def __len__(self):
             return len(self.data) #// 150
@@ -925,10 +939,10 @@ def main():
         def __getitem__(self, idx):
             # Data already patched, just return
             # Remove batch dimension: (1, C, H, W) -> (C, H, W)
-            return self.data[idx][0], self.labels[idx][0]
+            return self.data[idx][0], self.labels[idx][0], self.masks[idx][0]
     
-    train_dataset = SimpleDataset(combined_train_x, combined_train_y)
-    val_dataset = SimpleDataset(val_x_norm, val_y_norm)
+    train_dataset = SimpleDataset(combined_train_x, combined_train_y, combined_train_y_mask)
+    val_dataset = SimpleDataset(val_x_norm, val_y_norm, val_y_mask_patched)
     
     print(f"\nDataset sizes:")
     print(f"  Train: {len(train_dataset)} patches")
@@ -958,10 +972,10 @@ def main():
             super().__init__()
             self.alpha = alpha
         
-        def forward(self, predictions, targets):
+        def forward(self, predictions, targets, masks):
             # Weight proportional to target value (higher SWE = higher weight)
-            weights = 1.0 + self.alpha * (targets / (targets.max() + 1e-8))
-            loss = (predictions - targets) ** 2
+            weights = 1.0 + self.alpha * (targets[masks] / (targets[masks].max() + 1e-8))
+            loss = (predictions[masks] - targets[masks]) ** 2
             weighted_loss = loss * weights
             return weighted_loss.mean()
 
