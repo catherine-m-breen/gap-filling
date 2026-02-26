@@ -302,7 +302,7 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
     
     print(f"Loading {len(zarr_files)} FULL zarr files...")
     
-    for zarr_path in zarr_files:
+    for i, zarr_path in enumerate(zarr_files):
         # Get flight_id from filename (remove .zarr extension)
         flight_id = zarr_path.stem
         tif_name = flight_id + '.tif'
@@ -328,6 +328,7 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         z = zarr.open(str(zarr_path), mode='r')
         X = np.array(z['X'], dtype=np.float32)  # (C, H, W) - full image
         Y = np.array(z['Y'], dtype=np.float32)  # (1, H, W) - full label
+        if i == 1: print(np.unique(Y)) # just print Y of first to make sure it's non nan
         
         # ========================================
         # SKIP BRIGHTNESS TEMPERATURE CHANNELS
@@ -542,9 +543,25 @@ def main():
     
     # Normalize labels (Y) - same approach
     train_y_all = np.concatenate(train_y + val_y, axis=0)
-    y_mean = np.mean(train_y_all)
-    y_std = np.std(train_y_all)
-    
+    #y_mean = np.mean(train_y_all)
+    #y_std = np.std(train_y_all)
+    train_y_all = np.concatenate(train_y + val_y, axis=0)
+
+    # Only compute stats on VALID (positive, non-NaN) values
+    valid_y = train_y_all[(train_y_all > 0) & (~np.isnan(train_y_all))]
+
+    if len(valid_y) == 0:
+        print("  ERROR: No valid Y values found! All labels are 0 or NaN")
+        print(f"  Y range: [{train_y_all.min():.3f}, {train_y_all.max():.3f}]")
+        print(f"  Y unique values: {np.unique(train_y_all[:100])}")  # Sample
+        y_mean = 0.0
+        y_std = 1.0
+    else:
+        y_mean = np.mean(valid_y)
+        y_std = np.std(valid_y)
+        print(f"  Valid Y pixels: {len(valid_y):,} / {train_y_all.size:,} ({100*len(valid_y)/train_y_all.size:.2f}%)")
+        print(f"  Valid Y range: [{valid_y.min():.3f}, {valid_y.max():.3f}] m")
+        
     print(f"\nTarget (SWE) normalization:")
     print(f"  Mean: {y_mean:.4f} m")
     print(f"  Std: {y_std:.4f} m")
