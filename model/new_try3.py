@@ -114,16 +114,24 @@ class ASODataset(Dataset):
         # Remove batch dimension (1, C, H, W) -> (C, H, W)
         data_patch = data_patch[0]
         label_patch = label_patch[0]
+
+        label_mask = ((label_patch > 0) & (~np.isnan(label_patch))).astype(np.float32)
         
         if self.augment:
-            # Apply same crop to both data and label
-            combined = np.concatenate([data_patch, label_patch], axis=0)  # Stack along channel
+            # Apply same crop/flip to data, label, AND mask
+            # Stack all three along channel dimension
+            combined = np.concatenate([data_patch, label_patch, label_mask], axis=0)
             combined = random_crop(combined[None, :, :, :], self.crop_size)[0]
-            data_patch = combined[:-1, :, :]  # All channels except last
-            label_patch = combined[-1:, :, :]  # Last channel
             
-        return data_patch, label_patch
-
+            num_data_channels = data_patch.shape[0]
+            num_label_channels = label_patch.shape[0]
+            
+            # Split back out
+            data_patch = combined[:num_data_channels, :, :]
+            label_patch = combined[num_data_channels:num_data_channels+num_label_channels, :, :]
+            label_mask = combined[num_data_channels+num_label_channels:, :, :]
+            
+        return data_patch, label_patch, label_mask
 
 # ============================================================
 # Model (2D CNN like original script)
@@ -180,9 +188,11 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
     all_preds = []
     all_labels = []
 
-    for i, (features, labels) in enumerate(dataloader):
+    for i, (features, labels, labels_masks) in enumerate(dataloader):
         features = features.to(device, dtype=torch.float32)
         labels = labels.to(device, dtype=torch.float32)
+        ## this is redundant
+        #labels_masks = labels_masks.to(device, dtype=torch.float32)
 
         # Skip tiny patches
         if features.shape[2] < 2 or features.shape[3] < 2:
@@ -342,11 +352,12 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         
         # Handle invalid values
         X[X == -9999] = 0.0
-        X[X == 9999] = 0.0
-        Y[Y == -9999] = 0.0
-        Y[Y == 9999] = 0.0
-        Y[Y < 0] = 0.0  # No negative SWE
-        
+        #X[X == 9999] = 0.0
+        #Y[Y == -9999] = 0.0
+        #Y[Y == 9999] = 0.0
+        Y[Y < 0] = np.nan  # No negative SWE
+        Y[Y > 10] = np.nan # not values greater than 10? 
+
         # ========================================
         # CHECK FOR EXTREME Y VALUES (BEFORE CAPPING)
         # ========================================
