@@ -975,6 +975,7 @@ def main():
             self.alpha = alpha
         
         def forward(self, predictions, targets, masks):
+            IPython.embed()
             # Weight proportional to target value (higher SWE = higher weight)
             weights = 1.0 + self.alpha * (targets[masks] / (targets[masks].max() + 1e-8))
             loss = (predictions[masks] - targets[masks]) ** 2
