@@ -954,16 +954,16 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
     #criterion = nn.MSELoss() #nn.L1Loss()
     class ValueWeightedMSELoss(nn.Module):
-    def __init__(self, alpha=1.0):
-        super().__init__()
-        self.alpha = alpha
-    
-    def forward(self, predictions, targets):
-        # Weight proportional to target value (higher SWE = higher weight)
-        weights = 1.0 + self.alpha * (targets / (targets.max() + 1e-8))
-        loss = (predictions - targets) ** 2
-        weighted_loss = loss * weights
-        return weighted_loss.mean()
+        def __init__(self, alpha=1.0):
+            super().__init__()
+            self.alpha = alpha
+        
+        def forward(self, predictions, targets):
+            # Weight proportional to target value (higher SWE = higher weight)
+            weights = 1.0 + self.alpha * (targets / (targets.max() + 1e-8))
+            loss = (predictions - targets) ** 2
+            weighted_loss = loss * weights
+            return weighted_loss.mean()
 
     criterion = ValueWeightedMSELoss(alpha=2.0)   
 
@@ -1011,52 +1011,52 @@ def main():
                 print(f"\nEarly stopping at epoch {epoch}")
                 break
         
-        # Plot loss curves
-        print("\n" + "="*60)
-        print("SAVING RESULTS")
-        print("="*60)
-        
-        plt.figure(figsize=(10, 6))
-        plt.plot(range(1, len(train_losses) + 1), train_losses, 'b-o', label='Train Loss', linewidth=2)
-        plt.plot(range(1, len(val_losses) + 1), val_losses, 'r-s', label='Val Loss', linewidth=2)
-        plt.xlabel('Epoch', fontsize=12)
-        plt.ylabel('L1 Loss', fontsize=12)
-        plt.title('Training and Validation Loss', fontsize=14, fontweight='bold')
-        plt.legend(fontsize=11)
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-        
-        plot_path = os.path.join(checkpoint_dir, 'loss_curve.png')
-        plt.savefig(plot_path, dpi=150)
-        print(f"Saved loss plot to {plot_path}")
-        
-        # Save loss values
-        loss_txt_path = os.path.join(checkpoint_dir, 'loss_values.txt')
-        with open(loss_txt_path, 'w') as f:
-            f.write("Epoch,Train_Loss,Val_Loss\n")
-            for i, (train_l, val_l) in enumerate(zip(train_losses, val_losses), 1):
-                f.write(f"{i},{train_l:.6f},{val_l:.6f}\n")
-        print(f"Saved loss values to {loss_txt_path}")
-        
-        # Save normalization stats for later use
-        norm_stats = {
-            'X_mean': norm_mean[0, :, 0, 0].tolist(),
-            'X_std': norm_std[0, :, 0, 0].tolist(),
-            'Y_mean': float(y_mean),
-            'Y_std': float(y_std)
-        }
-        
-        import json
-        stats_path = os.path.join(checkpoint_dir, 'normalization_stats.json')
-        with open(stats_path, 'w') as f:
-            json.dump(norm_stats, f, indent=2)
-        print(f"Saved normalization stats to {stats_path}")
-        
-        print("\n" + "="*60)
-        print("TRAINING COMPLETE")
-        print("="*60)
-        print(f"Best validation loss: {best_val_loss:.6f}")
-        print(f"Model saved to: {checkpoint_dir}/best_model_cnn.pth")
+            # Plot loss curves
+            print("\n" + "="*60)
+            print("SAVING RESULTS")
+            print("="*60)
+            
+            plt.figure(figsize=(10, 6))
+            plt.plot(range(1, len(train_losses) + 1), train_losses, 'b-o', label='Train Loss', linewidth=2)
+            plt.plot(range(1, len(val_losses) + 1), val_losses, 'r-s', label='Val Loss', linewidth=2)
+            plt.xlabel('Epoch', fontsize=12)
+            plt.ylabel('L1 Loss', fontsize=12)
+            plt.title('Training and Validation Loss', fontsize=14, fontweight='bold')
+            plt.legend(fontsize=11)
+            plt.grid(True, alpha=0.3)
+            plt.tight_layout()
+            
+            plot_path = os.path.join(checkpoint_dir, 'loss_curve.png')
+            plt.savefig(plot_path, dpi=150)
+            print(f"Saved loss plot to {plot_path}")
+            
+            # Save loss values
+            loss_txt_path = os.path.join(checkpoint_dir, 'loss_values.txt')
+            with open(loss_txt_path, 'w') as f:
+                f.write("Epoch,Train_Loss,Val_Loss\n")
+                for i, (train_l, val_l) in enumerate(zip(train_losses, val_losses), 1):
+                    f.write(f"{i},{train_l:.6f},{val_l:.6f}\n")
+            print(f"Saved loss values to {loss_txt_path}")
+            
+            # Save normalization stats for later use
+            norm_stats = {
+                'X_mean': norm_mean[0, :, 0, 0].tolist(),
+                'X_std': norm_std[0, :, 0, 0].tolist(),
+                'Y_mean': float(y_mean),
+                'Y_std': float(y_std)
+            }
+            
+            import json
+            stats_path = os.path.join(checkpoint_dir, 'normalization_stats.json')
+            with open(stats_path, 'w') as f:
+                json.dump(norm_stats, f, indent=2)
+            print(f"Saved normalization stats to {stats_path}")
+            
+            print("\n" + "="*60)
+            print("TRAINING COMPLETE")
+            print("="*60)
+            print(f"Best validation loss: {best_val_loss:.6f}")
+            print(f"Model saved to: {checkpoint_dir}/best_model_cnn.pth")
 
 ##############
 ## if just want the eval
