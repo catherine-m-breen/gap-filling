@@ -184,12 +184,79 @@ class Model(nn.Module):
 # Training and Validation Functions
 # ============================================================
 
+def save_first_batch_viz(features, labels, predictions, masks, epoch, save_dir='checkpoints_new'):
+    """
+    Save visualizations of first batch item: input channels, target, prediction, mask
+    
+    Args:
+        features: (batch, channels, H, W) - input patches
+        labels: (batch, H, W) - target SWE
+        predictions: (batch, H, W) - model predictions
+        masks: (batch, H, W) - boolean mask
+        epoch: current epoch number
+        save_dir: directory to save plots
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    
+    # Move to CPU and get first item in batch
+    features_np = features[0].detach().cpu().numpy()  # (channels, H, W)
+    labels_np = labels[0].detach().cpu().numpy()  # (H, W)
+    preds_np = predictions[0].detach().cpu().numpy()  # (H, W)
+    masks_np = masks[0].cpu().numpy()  # (H, W)
+    
+    # Get number of input channels
+    n_channels = features_np.shape[0]
+    
+    # Create figure: input channels + target + prediction + mask
+    n_plots = n_channels + 3
+    fig, axes = plt.subplots(1, n_plots, figsize=(4*n_plots, 4))
+    
+    # Plot each input channel
+    for ch in range(n_channels):
+        im = axes[ch].imshow(features_np[ch], cmap='viridis')
+        axes[ch].set_title(f'Input Channel {ch}')
+        axes[ch].axis('off')
+        plt.colorbar(im, ax=axes[ch], fraction=0.046)
+    
+    # Plot target (masked)
+    target_masked = labels_np.copy()
+    target_masked[~masks_np] = np.nan
+    im = axes[n_channels].imshow(target_masked, cmap='Blues', vmin=0)
+    axes[n_channels].set_title('Target SWE')
+    axes[n_channels].axis('off')
+    plt.colorbar(im, ax=axes[n_channels], fraction=0.046)
+    
+    # Plot prediction (masked)
+    pred_masked = preds_np.copy()
+    pred_masked[~masks_np] = np.nan
+    im = axes[n_channels+1].imshow(pred_masked, cmap='Blues', vmin=0)
+    axes[n_channels+1].set_title('Predicted SWE')
+    axes[n_channels+1].axis('off')
+    plt.colorbar(im, ax=axes[n_channels+1], fraction=0.046)
+    
+    # Plot mask
+    im = axes[n_channels+2].imshow(masks_np, cmap='RdYlGn', vmin=0, vmax=1)
+    axes[n_channels+2].set_title(f'Mask ({masks_np.sum()}/{masks_np.size} valid)')
+    axes[n_channels+2].axis('off')
+    plt.colorbar(im, ax=axes[n_channels+2], fraction=0.046)
+    
+    plt.suptitle(f'Epoch {epoch} - First Batch Sample', fontsize=16, y=1.02)
+    plt.tight_layout()
+    
+    # Save figure
+    save_path = os.path.join(save_dir, f'epoch_{epoch:03d}_first_batch.png')
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    print(f"Saved first batch visualization to {save_path}")
+
 def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_size=8):
     model.train()
     total_loss = 0
     all_preds = []
     all_labels = []
 
+    first_batch = True 
     for i, (features, labels, masks) in enumerate(dataloader):
         features = features.to(device, dtype=torch.float32)
         labels = labels.to(device, dtype=torch.float32)
@@ -212,6 +279,7 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
         #mask = (labels != 0) & (~torch.isnan(labels)) & (labels >= 0) ## no negative values either 
         
         # Flatten for loss computation
+        ## these are all the same shape##
         labels_flat = labels.reshape(-1)
         output_flat = output.reshape(-1)
         mask_flat = masks.reshape(-1) ## use the mask that was create at the beginning
@@ -219,20 +287,26 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
         labels_masked = labels_flat[mask_flat]
         output_masked = output_flat[mask_flat]
 
+        # Save first batch visualization
+        IPython.embed()
+        if (epoch == 1) & first_batch:
+            save_first_batch_viz(features, labels, output, masks, epoch)
+            first_batch_saved = False
         # Skip if no valid pixels
-        if len(labels_masked) == 0:
-            continue
+        # if len(labels_masked) == 0:
+        #     continue
 
         # L1 loss + L1 regularization
         #IPython.embed()
         l1_lambda = 0.000001
         l1_norm = sum(p.abs().sum() for p in model.parameters())
-        IPython.embed()
-        loss = criterion(output_masked, labels_masked, mask_flat) + l1_lambda * l1_norm
+        #IPython.embed()
+        loss = criterion(labels_flat, output_flat, mask_flat) + l1_lambda * l1_norm
 
         loss.backward()
         total_loss += loss.item()
 
+        ## all predictions or just masked ones ? 
         all_preds.extend(output_masked.detach().cpu().numpy())
         all_labels.extend(labels_masked.cpu().numpy())
 
@@ -287,7 +361,7 @@ def validate_model(model, dataloader, criterion, device, epoch):
             if len(labels_masked) == 0:
                 continue
 
-            loss = criterion(output_masked, labels_masked, mask_flat)
+            loss = criterion(labels_flat, output_flat, mask_flat)
             total_loss += loss.item()
 
             all_preds.extend(output_masked.detach().cpu().numpy())
