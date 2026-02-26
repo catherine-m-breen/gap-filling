@@ -303,7 +303,7 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
         l1_lambda = 0.000001
         l1_norm = sum(p.abs().sum() for p in model.parameters())
         #IPython.embed()
-        loss = criterion(labels_flat, output_flat, mask_flat) + l1_lambda * l1_norm
+        loss = criterion(labels_masked, output_masked, mask_flat) + l1_lambda * l1_norm
 
         loss.backward()
         total_loss += loss.item()
@@ -363,7 +363,7 @@ def validate_model(model, dataloader, criterion, device, epoch):
             if len(labels_masked) == 0:
                 continue
 
-            loss = criterion(labels_flat, output_flat, mask_flat)
+            loss = criterion(labels_masked, output_masked, mask_flat)
             total_loss += loss.item()
 
             all_preds.extend(output_masked.detach().cpu().numpy())
@@ -1054,8 +1054,8 @@ def main():
         def forward(self, predictions, targets, masks):
             #IPython.embed()
             # Weight proportional to target value (higher SWE = higher weight)
-            weights = 1.0 + self.alpha * (targets[masks] / (targets[masks].max() + 1e-8))
-            loss = (predictions[masks] - targets[masks]) ** 2
+            weights = 1.0 + self.alpha * (targets / (targets.max() + 1e-8))
+            loss = (predictions - targets) ** 2
             weighted_loss = loss * weights
             return weighted_loss.mean()
 
