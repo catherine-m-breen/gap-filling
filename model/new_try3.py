@@ -290,7 +290,7 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
 
         # Save first batch visualization
         #IPython.embed()
-        if (epoch == 1) & first_batch:
+        if (epoch % 2) & first_batch:
             save_first_batch_viz(features, labels, output, masks, epoch)
             first_batch_saved = False
         # Skip if no valid pixels
@@ -898,10 +898,10 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
     #IPython.embed()
-    num_epochs = 100 #10 #1000
+    num_epochs = 30 #10 #1000
     batch_size = 16
     learning_rate = 1e-5 #0.01 ### learning rate start it really small? it will take longer to learn though 
-    patience = 20 #400
+    patience = 5 #400
     
     # Patching config
     patch_size = 128
