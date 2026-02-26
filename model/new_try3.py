@@ -190,10 +190,25 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
 
         output = model(features)
         
+        # FIX: Ensure labels have same shape as output
+        # labels comes as (batch, 1, H, W), squeeze to (batch, H, W)
+        if len(labels.shape) == 4 and labels.shape[1] == 1:
+            labels = labels.squeeze(1)  # (batch, 1, H, W) -> (batch, H, W)
+        
         # Mask: only compute loss on valid pixels (non-zero)
-        mask = (labels != 0)
-        labels_masked = labels[mask]
-        output_masked = output[mask]
+        mask = (labels != 0) & (~torch.isnan(labels))
+        
+        # Flatten for loss computation
+        labels_flat = labels.reshape(-1)
+        output_flat = output.reshape(-1)
+        mask_flat = mask.reshape(-1)
+        
+        labels_masked = labels_flat[mask_flat]
+        output_masked = output_flat[mask_flat]
+
+        # Skip if no valid pixels
+        if len(labels_masked) == 0:
+            continue
 
         # L1 loss + L1 regularization
         l1_lambda = 0.000001
@@ -216,8 +231,8 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
         optimizer.step()
         optimizer.zero_grad()
 
-    avg_loss = total_loss / len(dataloader)
-    print(f"Epoch {epoch} - Train Loss: {avg_loss:.6f}")
+    avg_loss = total_loss / max(len(dataloader), 1)
+    print(f"Epoch {epoch} - Train Loss: {avg_loss:.6f}, Valid pixels: {len(all_labels):,}")
     
     return avg_loss, (all_labels, all_preds)
 
@@ -237,9 +252,24 @@ def validate_model(model, dataloader, criterion, device, epoch):
                 continue
 
             output = model(features)
-            mask = (labels != 0)
-            labels_masked = labels[mask]
-            output_masked = output[mask]
+            
+            # FIX: Ensure labels have same shape as output
+            if len(labels.shape) == 4 and labels.shape[1] == 1:
+                labels = labels.squeeze(1)  # (batch, 1, H, W) -> (batch, H, W)
+            
+            # Mask: only compute loss on valid pixels
+            mask = (labels != 0) & (~torch.isnan(labels))
+            
+            # Flatten for loss computation
+            labels_flat = labels.reshape(-1)
+            output_flat = output.reshape(-1)
+            mask_flat = mask.reshape(-1)
+            
+            labels_masked = labels_flat[mask_flat]
+            output_masked = output_flat[mask_flat]
+
+            if len(labels_masked) == 0:
+                continue
 
             loss = criterion(output_masked, labels_masked)
             total_loss += loss.item()
@@ -247,11 +277,10 @@ def validate_model(model, dataloader, criterion, device, epoch):
             all_preds.extend(output_masked.detach().cpu().numpy())
             all_labels.extend(labels_masked.cpu().numpy())
 
-    avg_loss = total_loss / len(dataloader)
+    avg_loss = total_loss / max(len(dataloader), 1)
     print(f"Epoch {epoch} - Val Loss: {avg_loss:.6f}, Valid pixels: {len(all_labels):,}")
     
     return avg_loss, (all_labels, all_preds)
-
 
 # ============================================================
 # Data Loading Functions - LOAD FULL ZARR FILES
