@@ -289,8 +289,8 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
         output_masked = output_flat[mask_flat]
 
         # Save first batch visualization
-        IPython.embed()
-        if (epoch == 1) & first_batch:
+        #IPython.embed()
+        if (epoch % 5) & first_batch:
             save_first_batch_viz(features, labels, output, masks, epoch, save_dir)
             first_batch_saved = False
         # Skip if no valid pixels
