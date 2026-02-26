@@ -523,7 +523,7 @@ def convert_to_patches(train_x, train_y, val_x, val_y, test_x, test_y, train_y_m
     # Convert each split
     train_x_patched, train_y_patched, train_y_mask_patched = extract_patches_from_list(train_x, train_y, train_y_mask, "TRAIN")
     val_x_patched, val_y_patched, val_y_mask_patched = extract_patches_from_list(val_x, val_y, val_y_mask, "VAL")
-    test_x_patched, test_y_patched, test_y_mask_patched = extract_patches_from_list(test_x, test_y, test_y_mask "TEST")
+    test_x_patched, test_y_patched, test_y_mask_patched = extract_patches_from_list(test_x, test_y, test_y_mask, "TEST")
     
     print(f"\n{'='*60}")
     print(f"PATCHING COMPLETE")
