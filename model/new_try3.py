@@ -1100,7 +1100,8 @@ def main():
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
     
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
-    criterion = nn.MSELoss() #nn.L1Loss()
+    criterion = nn.SmoothL1Loss(beta=1.0) #nn.MSELoss() #nn.L1Loss()
+
     # class ValueWeightedMSELoss(nn.Module):
     #     def __init__(self, alpha=1.0):
     #         super().__init__()
