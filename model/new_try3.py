@@ -303,12 +303,13 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
         l1_lambda = 0.000001
         l1_norm = sum(p.abs().sum() for p in model.parameters())
         #IPython.embed()
-        loss = criterion(labels_masked, output_masked, mask_flat) + l1_lambda * l1_norm
+        loss = criterion(labels_masked, output_masked) + l1_lambda * l1_norm
 
         loss.backward()
         total_loss += loss.item()
 
-        ## all predictions or just masked ones ? 
+        ## all predictions or just masked ones ? This is just masked ones
+        ## we are just passing the valid preds and valid labels to each new step
         all_preds.extend(output_masked.detach().cpu().numpy())
         all_labels.extend(labels_masked.cpu().numpy())
 
@@ -325,6 +326,7 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
     avg_loss = total_loss / max(len(dataloader), 1)
     print(f"Epoch {epoch} - Train Loss: {avg_loss:.6f}, Valid pixels: {len(all_labels):,}")
     
+    #### this is what will get passed through to the next round ##
     return avg_loss, (all_labels, all_preds)
 
 
@@ -363,7 +365,7 @@ def validate_model(model, dataloader, criterion, device, epoch):
             if len(labels_masked) == 0:
                 continue
 
-            loss = criterion(labels_masked, output_masked, mask_flat)
+            loss = criterion(labels_masked, output_masked)
             total_loss += loss.item()
 
             all_preds.extend(output_masked.detach().cpu().numpy())
@@ -990,7 +992,7 @@ def main():
         x_flip, y_flip, y_mask_flip = random_flip(x, y, z)
         
         # Apply noise to X only (not Y)
-        x_noisy = add_gaussian_noise(x_flip, mean=0, sigma=0.1)
+        x_noisy = add_gaussian_noise(x_flip[0], mean=0, sigma=0.1) ## just do the first channel
         
         augmented_x.append(x_noisy)
         augmented_y.append(y_flip)
@@ -1051,7 +1053,7 @@ def main():
             super().__init__()
             self.alpha = alpha
         
-        def forward(self, predictions, targets, masks):
+        def forward(self, predictions, targets):
             #IPython.embed()
             # Weight proportional to target value (higher SWE = higher weight)
             weights = 1.0 + self.alpha * (targets / (targets.max() + 1e-8))
