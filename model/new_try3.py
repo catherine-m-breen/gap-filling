@@ -196,7 +196,7 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
             labels = labels.squeeze(1)  # (batch, 1, H, W) -> (batch, H, W)
         
         # Mask: only compute loss on valid pixels (non-zero)
-        mask = (labels != 0) & (~torch.isnan(labels))
+        mask = (labels != 0) & (~torch.isnan(labels)) & (labels < 0) ## no negative values either 
         
         # Flatten for loss computation
         labels_flat = labels.reshape(-1)
@@ -258,7 +258,7 @@ def validate_model(model, dataloader, criterion, device, epoch):
                 labels = labels.squeeze(1)  # (batch, 1, H, W) -> (batch, H, W)
             
             # Mask: only compute loss on valid pixels
-            mask = (labels != 0) & (~torch.isnan(labels))
+            mask = (labels != 0) & (~torch.isnan(labels)) & (labels < 0) ## no negative values either 
             
             # Flatten for loss computation
             labels_flat = labels.reshape(-1)
@@ -343,11 +343,12 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
             # 9-10: masks
             
             # Keep channels [0, 1, 2, 3, 8, 9, 10] - skip [4, 5, 6, 7]
-            channels_to_keep = [8] #[0, 1, 2, 3, 8, 9, 10]
+            channels_to_keep = [7] #[0, 1, 2, 3, 8, 9, 10] ## 8 will have a LOT of NANs, we just want to make sure eveyrhting is working for now 
             X = X[channels_to_keep, :, :]
             print(f"  Removed TB channels, X shape: {X.shape[0]} channels")
         
         # Handle invalid values
+
         X[X == -9999] = 0.0
         X[X == 9999] = 0.0
         Y[Y == -9999] = 0.0
@@ -468,8 +469,11 @@ def normalize_dataset_per_channel(train_data, val_data):
     all_data = np.concatenate(combined_data, axis=0)  # (N, C, H, W)
     
     # Compute mean and std per channel
-    mean = np.mean(all_data, axis=(0, 2, 3), keepdims=True)  # (1, C, 1, 1)
-    std = np.std(all_data, axis=(0, 2, 3), keepdims=True)    # (1, C, 1, 1)
+    # mean = np.mean(all_data, axis=(0, 2, 3), keepdims=True)  # (1, C, 1, 1)
+    # std = np.std(all_data, axis=(0, 2, 3), keepdims=True)    # (1, C, 1, 1)
+    mean = np.nanmean(all_data, axis=(0, 2, 3), keepdims=True)  # (1, C, 1, 1)
+    std = np.nanstd(all_data, axis=(0, 2, 3), keepdims=True)    # (1, C, 1, 1)
+    
     
     print(f"Channel means: {mean[0, :, 0, 0]}")
     print(f"Channel stds: {std[0, :, 0, 0]}")
