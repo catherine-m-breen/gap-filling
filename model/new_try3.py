@@ -395,7 +395,7 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
     # ========================================
     if len(extreme_value_files) > 0:
         print("\n" + "="*80)
-        print(f"⚠️  FOUND {len(extreme_value_files)} FILES WITH Y > 10m")
+        print(f"FOUND {len(extreme_value_files)} FILES WITH Y > 10m")
         print("="*80)
         
         # Sort by max value descending
@@ -546,7 +546,7 @@ def main():
     zarr_dir = "/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks"
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
-    IPython.embed()
+    #IPython.embed()
     num_epochs = 10 #1000
     batch_size = 16
     learning_rate = 1e-4 #0.01
