@@ -289,7 +289,7 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
         output_masked = output_flat[mask_flat]
 
         # Save first batch visualization
-        #IPython.embed()
+        IPython.embed()
         if (epoch % 2) & first_batch:
             save_first_batch_viz(features, labels, output, masks, epoch)
             first_batch_saved = False
