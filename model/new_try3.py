@@ -936,7 +936,7 @@ def main():
     stride = 64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./checkpoints_elevation_MSELoss"
+    checkpoint_dir = "./checkpoints_elevation_MSELoss_1e-6_150"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
