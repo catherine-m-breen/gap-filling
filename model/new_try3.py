@@ -366,12 +366,12 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
                 print(f"  Removed TB channels, X shape: {X.shape[0]} channels")
         
         # Handle invalid values
-        X[X == -9999] = 0.0
+        #X[X == -9999] = 0.0
         #X[X == 9999] = 0.0
         #Y[Y == -9999] = 0.0
         #Y[Y == 9999] = 0.0
         Y[Y < 0] = np.nan  # No negative SWE
-        Y[Y > 10] = np.nan # not values greater than 10? 
+        #Y[Y > 10] = np.nan # not values greater than 10? 
 
         # ========================================
         # CHECK FOR EXTREME Y VALUES (BEFORE CAPPING)
@@ -746,6 +746,8 @@ def evaluate_test_set(model, test_x, test_y, y_mean, y_std, device, checkpoint_d
             verticalalignment='top', bbox=props)
     
     ax.legend(fontsize=12, loc='lower right')
+    ax.set_ylim(0,5)
+    ax.set_xlim(0,5)
     ax.grid(True, alpha=0.3)
     ax.set_aspect('equal', adjustable='box')
     
@@ -937,7 +939,7 @@ def main():
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
     
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
-    criterion = nn.L1Loss()
+    criterion = nn.MSELoss() #nn.L1Loss()
     scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-6)
     
     
@@ -1036,7 +1038,7 @@ def main():
     # Normalize test data using same stats as train/val
     print("\nNormalizing test data...")
     test_x_norm = []
-    for data in test_x:
+    for data in train_x:
         normalized = (data - norm_mean) / (norm_std + 1e-7)
         test_x_norm.append(normalized)
     
