@@ -150,7 +150,7 @@ def train():
     model = ToyModel(in_channels=17).to(cfg.device)
     # Train this
     #AttentionUNet(in_channels=17, out_channels=1).to(cfg.device)
-    criterion = nn.L1Loss()   # Better for SWE / regression problems
+    criterion = nn.L2Loss()   # Better for SWE / regression problems
     optimizer = optim.Adam(model.parameters(), lr=cfg.lr) ##1e-3
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
     optimizer, mode='min', factor=0.5, patience=5)
