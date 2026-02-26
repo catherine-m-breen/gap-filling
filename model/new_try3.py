@@ -109,6 +109,7 @@ class ASODataset(Dataset):
         return len(self.patch_index) 
 
     def __getitem__(self, idx):
+        IPython.embed()
         file_idx, row, col = self.patch_index[idx]
         
         # Extract patch from full image
@@ -138,7 +139,7 @@ class ASODataset(Dataset):
             label_patch = combined[num_data_channels:num_data_channels+num_label_channels, :, :]
             label_mask = combined[num_data_channels+num_label_channels:, :, :]
             
-        return data_patch, label_patch #, label_mask
+        return data_patch, label_patch, (row,col) #, label_mask
 
 # ============================================================
 # Model (2D CNN like original script)
@@ -189,7 +190,7 @@ class Model(nn.Module):
 # Training and Validation Functions
 # ============================================================
 
-def save_first_batch_viz(features, labels, predictions, masks, epoch, save_dir):
+def save_first_batch_viz(features, labels, predictions, masks, epoch, save_dir, flight, patch):
     """
     Save visualizations of first batch item: input channels, target, prediction, mask
     
@@ -246,7 +247,7 @@ def save_first_batch_viz(features, labels, predictions, masks, epoch, save_dir):
     axes[n_channels+2].axis('off')
     plt.colorbar(im, ax=axes[n_channels+2], fraction=0.046)
     
-    plt.suptitle(f'Epoch {epoch} - First Batch Sample', fontsize=16, y=1.02)
+    plt.suptitle(f'Epoch {epoch} - First Batch Sample \n {flight} \n {patch}', fontsize=16, y=1.02)
     plt.tight_layout()
     
     # Save figure
@@ -299,7 +300,7 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
         "Saving Image...."
         if (epoch % 5) & first_batch:
             ## labels aren't normalized weirdly??
-            save_first_batch_viz(features, labels, output, masks, epoch, save_dir)
+            save_first_batch_viz(features, labels, output, masks, epoch, save_dir, flight, patch)
             first_batch = False
         # Skip if no valid pixels
         # if len(labels_masked) == 0:
