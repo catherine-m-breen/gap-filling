@@ -197,7 +197,7 @@ def save_first_batch_viz(features, labels, predictions, masks, epoch, save_dir='
         save_dir: directory to save plots
     """
     os.makedirs(save_dir, exist_ok=True)
-    
+    #  save_first_batch_viz(features, labels, output, masks, epoch)
     # Move to CPU and get first item in batch
     features_np = features[0].detach().cpu().numpy()  # (channels, H, W)
     labels_np = labels[0].detach().cpu().numpy()  # (H, W)
@@ -218,24 +218,25 @@ def save_first_batch_viz(features, labels, predictions, masks, epoch, save_dir='
         axes[ch].axis('off')
         plt.colorbar(im, ax=axes[ch], fraction=0.046)
     
-    # Plot target (masked)
-    target_masked = labels_np.copy()
-    target_masked[~masks_np] = np.nan
-    im = axes[n_channels].imshow(target_masked, cmap='Blues', vmin=0)
+    # Plot target (NOT masked)
+    target = labels_np.copy()
+    #  target_masked[~masks_np] = np.nan
+    #target_masked[~masks_np.squeeze()] = np.nan
+    im = axes[n_channels].imshow(target, cmap='Blues', vmin=0)
     axes[n_channels].set_title('Target SWE')
     axes[n_channels].axis('off')
     plt.colorbar(im, ax=axes[n_channels], fraction=0.046)
     
-    # Plot prediction (masked)
-    pred_masked = preds_np.copy()
-    pred_masked[~masks_np] = np.nan
-    im = axes[n_channels+1].imshow(pred_masked, cmap='Blues', vmin=0)
+    # Plot prediction (NOT masked)
+    pred = preds_np.copy()
+    #pred_masked[~masks_np] = np.nan
+    im = axes[n_channels+1].imshow(pred, cmap='Blues', vmin=0)
     axes[n_channels+1].set_title('Predicted SWE')
     axes[n_channels+1].axis('off')
     plt.colorbar(im, ax=axes[n_channels+1], fraction=0.046)
     
     # Plot mask
-    im = axes[n_channels+2].imshow(masks_np, cmap='RdYlGn', vmin=0, vmax=1)
+    im = axes[n_channels+2].imshow(masks_np.squeeze(), cmap='RdYlGn', vmin=0, vmax=1)
     axes[n_channels+2].set_title(f'Mask ({masks_np.sum()}/{masks_np.size} valid)')
     axes[n_channels+2].axis('off')
     plt.colorbar(im, ax=axes[n_channels+2], fraction=0.046)
@@ -288,7 +289,7 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
         output_masked = output_flat[mask_flat]
 
         # Save first batch visualization
-        IPython.embed()
+        #IPython.embed()
         if (epoch == 1) & first_batch:
             save_first_batch_viz(features, labels, output, masks, epoch)
             first_batch_saved = False
@@ -429,7 +430,7 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         # SKIP BRIGHTNESS TEMPERATURE CHANNELS
         # ========================================
         if skip_tb_channels:
-            channels_to_keep = [7]
+            channels_to_keep = [3]
             X = X[channels_to_keep, :, :]
 
             # ========================================
@@ -907,7 +908,7 @@ def main():
     stride = 64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./checkpoints_new"
+    checkpoint_dir = "./checkpoints_Elevation"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
