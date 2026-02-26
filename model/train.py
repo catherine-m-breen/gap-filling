@@ -149,16 +149,16 @@ def train():
 
     model = ToyModel(in_channels=17).to(cfg.device)
     # Train this
-
     #AttentionUNet(in_channels=17, out_channels=1).to(cfg.device)
     criterion = nn.L1Loss()   # Better for SWE / regression problems
-    optimizer = optim.Adam(model.parameters(), lr=cfg.lr)
+    optimizer = optim.Adam(model.parameters(), lr=cfg.lr) ##1e-3
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
     optimizer, mode='min', factor=0.5, patience=5)
 
+    ## for early stopping
     best_val_loss = float("inf")
     
-    # Track losses for plotting
+    # track losses for plotting
     train_losses = []
     val_losses = []
 
@@ -234,7 +234,7 @@ def train():
         scheduler.step(val_loss)
     
         # Print current learning rate
-        current_lr = optimizer.param_groups[0]['lr']
+        current_lr = optimizer.param_groups[0]['lr'] ##1e-3
         print(f"Learning Rate: {current_lr:.6e}")
 
         # Save best model
