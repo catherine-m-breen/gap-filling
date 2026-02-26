@@ -196,7 +196,7 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
             labels = labels.squeeze(1)  # (batch, 1, H, W) -> (batch, H, W)
         
         # Mask: only compute loss on valid pixels (non-zero)
-        mask = (labels != 0) & (~torch.isnan(labels)) & (labels < 0) ## no negative values either 
+        mask = (labels != 0) & (~torch.isnan(labels)) & (labels >= 0) ## no negative values either 
         
         # Flatten for loss computation
         labels_flat = labels.reshape(-1)
@@ -258,7 +258,7 @@ def validate_model(model, dataloader, criterion, device, epoch):
                 labels = labels.squeeze(1)  # (batch, 1, H, W) -> (batch, H, W)
             
             # Mask: only compute loss on valid pixels
-            mask = (labels != 0) & (~torch.isnan(labels)) & (labels < 0) ## no negative values either 
+            mask = (labels != 0) & (~torch.isnan(labels)) & (labels >= 0) ## no negative values either 
             
             # Flatten for loss computation
             labels_flat = labels.reshape(-1)
@@ -503,8 +503,8 @@ def main():
     
     num_epochs = 10 #1000
     batch_size = 16
-    learning_rate = 0.01
-    patience = 400
+    learning_rate = 1e-4 #0.01
+    patience = 20 #400
     
     # Patching config
     patch_size = 128
@@ -618,7 +618,7 @@ def main():
     
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
     criterion = nn.L1Loss()
-    scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=0.0001)
+    scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-6)
     
     
     # Training loop
