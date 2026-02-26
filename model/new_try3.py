@@ -247,11 +247,11 @@ def save_first_batch_viz(features, labels, predictions, masks, epoch, save_dir, 
     axes[n_channels+2].axis('off')
     plt.colorbar(im, ax=axes[n_channels+2], fraction=0.046)
     
-    plt.suptitle(f'Epoch {epoch} - First Batch Sample \n {flight} \n {patch}', fontsize=16, y=1.02)
+    plt.suptitle(f'Epoch {epoch} - First Batch Sample', fontsize=16, y=1.02)
     plt.tight_layout()
     
     # Save figure
-    save_path = os.path.join(save_dir, f'epoch_{epoch:03d}_first_batch.png')
+    save_path = os.path.join(save_dir, f'epoch_{epoch:03d}_first_batch.png') #\n {flight} \n {patch}
     plt.savefig(save_path, dpi=150, bbox_inches='tight')
     plt.close()
     
@@ -300,7 +300,7 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
         "Saving Image...."
         if (epoch % 5) & first_batch:
             ## labels aren't normalized weirdly??
-            save_first_batch_viz(features, labels, output, masks, epoch, save_dir, flight, patch)
+            save_first_batch_viz(features, labels, output, masks, epoch, save_dir) # flight, patch)
             first_batch = False
         # Skip if no valid pixels
         # if len(labels_masked) == 0:
@@ -470,7 +470,6 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         #Y[Y == -9999] = 0.0
         #Y[Y == 9999] = 0.0
         Y[Y < 0] = np.nan  # No negative SWE
-        Y_mask = ~np.isnan(Y)  # Boolean mask: True where valid, False where NaN ## pass this through so we can only look where we have data! 
         #Y[Y > 10] = np.nan # not values greater than 10? 
 
         # ========================================
@@ -494,8 +493,9 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
             })
         
         # Now cap the values
-        Y[Y > 10.0] = 0.0  # No SWE over 10m
-        
+        Y[Y > 10.0] = np.nan  # No SWE over 10m
+        Y_mask = ~np.isnan(Y)  # Boolean mask: True where valid, False where NaN ## pass this through so we can only look where we have data! 
+
         # Add batch dimension for consistency: (1, C, H, W)
         X = X[None, :, :, :]
         Y = Y[None, :, :, :]
@@ -930,7 +930,7 @@ def main():
     stride = 64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./checkpoints_Elevation"
+    checkpoint_dir = "./checkpoints_elevation_fixedGauss"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
