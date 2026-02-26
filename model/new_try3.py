@@ -184,7 +184,7 @@ class Model(nn.Module):
 # Training and Validation Functions
 # ============================================================
 
-def save_first_batch_viz(features, labels, predictions, masks, epoch, save_dir='checkpoints_new'):
+def save_first_batch_viz(features, labels, predictions, masks, epoch, save_dir):
     """
     Save visualizations of first batch item: input channels, target, prediction, mask
     
@@ -251,7 +251,7 @@ def save_first_batch_viz(features, labels, predictions, masks, epoch, save_dir='
     
     print(f"Saved first batch visualization to {save_path}")
 
-def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_size=8):
+def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_size=8, save_dir= 'checkpoints'):
     model.train()
     total_loss = 0
     all_preds = []
@@ -290,14 +290,14 @@ def train_model(model, dataloader, optimizer, criterion, device, epoch, batch_si
 
         # Save first batch visualization
         IPython.embed()
-        if (epoch % 2) & first_batch:
-            save_first_batch_viz(features, labels, output, masks, epoch)
+        if (epoch == 1) & first_batch:
+            save_first_batch_viz(features, labels, output, masks, epoch, save_dir)
             first_batch_saved = False
         # Skip if no valid pixels
         # if len(labels_masked) == 0:
         #     continue
 
-        # L1 loss + L1 regularization
+        # L1 loss + L1 regularizationcheckp
         #IPython.embed()
         l1_lambda = 0.000001
         l1_norm = sum(p.abs().sum() for p in model.parameters())
@@ -1078,8 +1078,8 @@ def main():
             print(f"\n--- Epoch {epoch}/{num_epochs} ---")
             
             train_loss, _ = train_model(
-                model, train_loader, optimizer, criterion, device, epoch, batch_size= 2 #batch_size
-            )
+                model, train_loader, optimizer, criterion, device, epoch, batch_size= 2, #batch_size
+            save_dir=checkpoint_dir)
             
             val_loss, _ = validate_model(
                 model, val_loader, criterion, device, epoch
