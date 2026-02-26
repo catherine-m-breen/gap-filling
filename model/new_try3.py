@@ -468,7 +468,7 @@ def main():
     zarr_dir = "/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks"
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
-    num_epochs = 1000
+    num_epochs = 10 #1000
     batch_size = 16
     learning_rate = 0.01
     patience = 400
@@ -552,7 +552,7 @@ def main():
             self.labels = labels
         
         def __len__(self):
-            return len(self.data)
+            return len(self.data) // 2
         
         def __getitem__(self, idx):
             # Data already patched, just return
