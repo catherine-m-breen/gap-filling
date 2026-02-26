@@ -285,7 +285,6 @@ def validate_model(model, dataloader, criterion, device, epoch):
 # ============================================================
 # Data Loading Functions - LOAD FULL ZARR FILES
 # ============================================================
-
 def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_channels=True):
     """
     Load FULL zarr files (not patches) and organize by train/val/test split.
@@ -300,9 +299,12 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
     val_x, val_y = [], []
     test_x, test_y = [], []
     
+    # ADD THIS: Track extreme values
+    extreme_value_files = []
+    
     print(f"Loading {len(zarr_files)} FULL zarr files...")
     
-    for i, zarr_path in enumerate(zarr_files):
+    for zarr_path in zarr_files:
         # Get flight_id from filename (remove .zarr extension)
         flight_id = zarr_path.stem
         tif_name = flight_id + '.tif'
@@ -328,33 +330,45 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         z = zarr.open(str(zarr_path), mode='r')
         X = np.array(z['X'], dtype=np.float32)  # (C, H, W) - full image
         Y = np.array(z['Y'], dtype=np.float32)  # (1, H, W) - full label
-        if i == 1: print(np.unique(Y)) # just print Y of first to make sure it's non nan
         
         # ========================================
         # SKIP BRIGHTNESS TEMPERATURE CHANNELS
         # ========================================
         if skip_tb_channels:
-            # Original channels:
-            # 0: snow_class
-            # 1: landcover
-            # 2: canopy_cover
-            # 3: elevation
-            # 4-7: TB channels (37H, 37V, 19H, 19V) <- SKIP THESE
-            # 8: NDSI
-            # 9-10: masks
-            
-            # Keep channels [0, 1, 2, 3, 8, 9, 10] - skip [4, 5, 6, 7]
-            channels_to_keep = [7] #[0, 1, 2, 3, 8, 9, 10] ## 8 will have a LOT of NANs, we just want to make sure eveyrhting is working for now 
+            channels_to_keep = [7]
             X = X[channels_to_keep, :, :]
-            print(f"  Removed TB channels, X shape: {X.shape[0]} channels")
+            if len(train_x) == 0:  # Only print once
+                print(f"  Removed TB channels, X shape: {X.shape[0]} channels")
         
         # Handle invalid values
-
         X[X == -9999] = 0.0
         X[X == 9999] = 0.0
         Y[Y == -9999] = 0.0
         Y[Y == 9999] = 0.0
         Y[Y < 0] = 0.0  # No negative SWE
+        
+        # ========================================
+        # CHECK FOR EXTREME Y VALUES (BEFORE CAPPING)
+        # ========================================
+        extreme_mask = Y > 10.0
+        num_extreme = extreme_mask.sum()
+        
+        if num_extreme > 0:
+            max_value = Y[extreme_mask].max()
+            mean_extreme = Y[extreme_mask].mean()
+            extreme_value_files.append({
+                'tif': tif_name,
+                'basin': basin,
+                'split': split,
+                'count': num_extreme,
+                'max': max_value,
+                'mean_extreme': mean_extreme,
+                'total_pixels': Y.size,
+                'percent': 100 * num_extreme / Y.size
+            })
+        
+        # Now cap the values
+        Y[Y > 10.0] = 0.0  # No SWE over 10m
         
         # Add batch dimension for consistency: (1, C, H, W)
         X = X[None, :, :, :]
@@ -375,6 +389,35 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
             test_y.append(Y)
     
     print(f"\nLoaded: {len(train_x)} train, {len(val_x)} val, {len(test_x)} test FULL images")
+    
+    # ========================================
+    # REPORT EXTREME VALUES
+    # ========================================
+    if len(extreme_value_files) > 0:
+        print("\n" + "="*80)
+        print(f"⚠️  FOUND {len(extreme_value_files)} FILES WITH Y > 10m")
+        print("="*80)
+        
+        # Sort by max value descending
+        extreme_value_files.sort(key=lambda x: x['max'], reverse=True)
+        
+        print(f"\n{'TIF Name':<50} {'Basin':<15} {'Split':<8} {'Count':>8} {'Max (m)':>10} {'Mean (m)':>10} {'% of pixels':>12}")
+        print("-" * 120)
+        
+        for info in extreme_value_files:
+            print(f"{info['tif']:<50} {info['basin']:<15} {info['split']:<8} "
+                  f"{info['count']:>8,} {info['max']:>10.2f} {info['mean_extreme']:>10.2f} "
+                  f"{info['percent']:>11.2f}%")
+        
+        total_extreme = sum(f['count'] for f in extreme_value_files)
+        total_pixels = sum(f['total_pixels'] for f in extreme_value_files)
+        
+        print("-" * 120)
+        print(f"{'TOTAL':<50} {'':<15} {'':<8} {total_extreme:>8,} "
+              f"{'':>10} {'':>10} {100*total_extreme/total_pixels:>11.2f}%")
+        print("\n" + "="*80 + "\n")
+    else:
+        print("\n✓ No files with Y > 10m found\n")
     
     return train_x, train_y, val_x, val_y, test_x, test_y
 
@@ -498,10 +541,12 @@ def normalize_dataset_per_channel(train_data, val_data):
 # Main Training Script
 # ============================================================
 def main():
+    import IPython
     # Config
     zarr_dir = "/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks"
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
+    IPython.embed()
     num_epochs = 10 #1000
     batch_size = 16
     learning_rate = 1e-4 #0.01
@@ -543,8 +588,8 @@ def main():
     
     # Normalize labels (Y) - same approach
     train_y_all = np.concatenate(train_y + val_y, axis=0)
-    #y_mean = np.mean(train_y_all)
-    #y_std = np.std(train_y_all)
+    #y_mean = np.nanmean(train_y_all)
+    #y_std = np.nanstd(train_y_all)
     train_y_all = np.concatenate(train_y + val_y, axis=0)
 
     # Only compute stats on VALID (positive, non-NaN) values
