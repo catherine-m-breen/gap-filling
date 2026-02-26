@@ -40,7 +40,7 @@ def random_crop(data, crop_size):
     return data[:, :, dw:dw+crop_size[0], dh:dh+crop_size[1]]
 
 
-def random_flip(data, labels):
+def random_flip(data, labels, masks):
     """Random horizontal and vertical flips."""
     flip_w = np.random.choice([True, False])
     flip_h = np.random.choice([True, False])
@@ -48,11 +48,13 @@ def random_flip(data, labels):
     if flip_w:
         data = np.flip(data, axis=2).copy()
         labels = np.flip(labels, axis=1).copy()  # Match label dims
+        masks = np.flip(masks, axis=1).copy()  # Match label dims
     if flip_h:
         data = np.flip(data, axis=3).copy()
         labels = np.flip(labels, axis=2).copy()
+        masks = np.flip(masks, axis=2).copy()
     
-    return data, labels
+    return data, labels, masks
 
 
 def add_gaussian_noise(image, mean=0, sigma=25):
