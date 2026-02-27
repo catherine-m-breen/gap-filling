@@ -3,8 +3,7 @@
 
 '''
 same thing as new_try2 but works with full zarr data
-#### this is for all pixels!!! 
-### Right now we are predicting all pixels aso with elevation and 4tb 
+### let's see we can make it work with the unforested locations
 '''
 
 import numpy as np

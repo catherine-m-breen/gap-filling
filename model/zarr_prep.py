@@ -165,16 +165,16 @@ for aso_flight in asopath:
     store.attrs["transform"] = tuple(transform)
     store.attrs["resolution"] = resolution
     store.attrs["channel_names"] = [
-        "snow_class",
-        "landcover",
-        "canopy_cover",
-        "elevation",
-        "tb_37H",
-        "tb_37V",
-        "tb_19H",
-        "tb_19V",
-        "ndsi",
-        "forested_mask",
+        "snow_class", #0
+        "landcover", #1
+        "canopy_cover", #2
+        "elevation", #3
+        "tb_37H", #4
+        "tb_37V", #5
+        "tb_19H", #6
+        "tb_19V", #7
+        "ndsi", #8
+        "forested_mask", #9
         "snow_class_1_tundra",
         "snow_class_2_boreal_forest",
         "snow_class_3_maritime",
