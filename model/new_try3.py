@@ -532,15 +532,16 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         Y[Y > 10.0] = np.nan  # No SWE over 10m
 
         #### should just be one line of code 
-        # canopy_cover = X[0, :, :]  # Get canopy cover channel (H, W)
-        # Y[canopy_cover <= 40] = np.nan  # Mask out pixels with <=40% canopy cover
+        canopy_cover = X[0, :, :]  # Get canopy cover channel (H, W)
+        Y[0, canopy_cover <= 40] = np.nan  #
 
         Y_mask = ~np.isnan(Y)  # Boolean mask: True where valid, False where NaN ## pass this through so we can only look where we have data! 
 
         # Add batch dimension for consistency: (1, C, H, W)
         X = X[None, :, :, :]
         Y = Y[None, :, :, :]
-        Y_mask = Y_mask[None, :, :, :]
+        Y_mask = Y_mask[None, :, :]
+        #Y_mask = Y_mask[None, :, :, :]
         
         if len(train_x) == 0:  # Only print once
             print(f"  Loaded {flight_id} ({basin}, {split}): X={X.shape}, Y={Y.shape}")
