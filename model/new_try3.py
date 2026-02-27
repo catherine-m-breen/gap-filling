@@ -453,12 +453,14 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         if skip_tb_channels:
             channels_to_keep = [2, 3, 4, 5, 6, 7, 8] ## canopy cover + elevation + passive microwave + viirs NDSI
             X = X[channels_to_keep, :, :]
-
+            all_but_viirs = X[:6,:,:]
             # ========================================
             # CREATE NaN MASK CHANNEL
             # ========================================
             # Create binary mask: 1 = valid data, 0 = NaN
             #X[X == -9999] = np.nan
+            all_but_viirs[all_but_viirs == -9999] = 0
+            all_but_viirs_filled = np.nan_to_num(all_but_viirs, nan=0.0)
             #nan_mask = (~np.isnan(X)).astype(np.float32)
             ## just NDSI
             nan_mask = (~np.isnan(X[6, :, :])).astype(np.float32)
@@ -476,7 +478,7 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
             ## channel 0, 1, 2, 3, 4 -- elevation, 4 Tbs
             ## channels 5, 6, 7, 8 9 -- elevation 4 Tbs masks
             #X = np.concatenate([X_filled, nan_mask], axis=0)
-            X = np.concatenate([X[:6, :, :], viirs_filled, viirs_mask], axis=0)
+            X = np.concatenate([all_but_viirs_filled, viirs_filled, viirs_mask], axis=0)
 
 
             if len(train_x) == 0:  # Only print once
