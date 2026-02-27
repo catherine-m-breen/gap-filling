@@ -1080,7 +1080,7 @@ def main():
     stride = int(patch_size/ 2) #64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./checkpoints_elevPM_NDSI_CC_1e-5_ps256_smoothL1loss_150"
+    checkpoint_dir = "./checkpoints_elevPM_NDSI_CC_1e-5_ps256_MSELoss"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
@@ -1206,7 +1206,7 @@ def main():
             self.masks = labels_masks
         
         def __len__(self):
-            return len(self.data) // 150
+            return len(self.data) #// 150
         
         def __getitem__(self, idx):
             # Data already patched, just return
