@@ -458,17 +458,26 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
             # CREATE NaN MASK CHANNEL
             # ========================================
             # Create binary mask: 1 = valid data, 0 = NaN
-            X[X == -9999] = np.nan
-            nan_mask = (~np.isnan(X)).astype(np.float32)
+            #X[X == -9999] = np.nan
+            #nan_mask = (~np.isnan(X)).astype(np.float32)
+            ## just NDSI
+            nan_mask = (~np.isnan(X[6, :, :])).astype(np.float32)
             
             # Fill NaN in original data with 0 (or mean)
-            X_filled = np.nan_to_num(X, nan=0.0)
+            #X_filled = np.nan_to_num(X, nan=0.0)
+
+            ## just NDSI
+            X_filled = np.nan_to_num(X[6, :, :], nan=0.0)    
+            viirs_filled = X_filled[np.newaxis, :, :]  # (1, H, W)
+            viirs_mask = nan_mask[np.newaxis, :, :]      # (1, H, W)
             
             # Stack data and mask as separate channels
             # Result: (2, H, W) - channel 0 = data, channel 1 = mask
             ## channel 0, 1, 2, 3, 4 -- elevation, 4 Tbs
             ## channels 5, 6, 7, 8 9 -- elevation 4 Tbs masks
-            X = np.concatenate([X_filled, nan_mask], axis=0)
+            #X = np.concatenate([X_filled, nan_mask], axis=0)
+            X = np.concatenate([X[:6, :, :], viirs_filled, viirs_mask], axis=0)
+
 
             if len(train_x) == 0:  # Only print once
                 print(f"  Not all channels, X shape: {X.shape[0]} channels")
@@ -951,43 +960,43 @@ def evaluate_test_set(model, test_x, test_y, test_mask, y_mean, y_std, device, c
     }
 #+++++++++++++++
 
-# class WeightedSmoothL1Loss(nn.Module):
-#     """
-#     SmoothL1Loss that weights errors by target magnitude.
-#     Higher SWE values get higher penalty for errors.
-#     """
-#     def __init__(self, beta=1.0, weight_power=1.0):
-#         """
-#         Args:
-#             beta: SmoothL1Loss transition point (quadratic to linear)
-#             weight_power: Exponent for weighting (1.0 = linear, 2.0 = quadratic)
-#         """
-#         super(WeightedSmoothL1Loss, self).__init__()
-#         self.beta = beta
-#         self.weight_power = weight_power
+class WeightedSmoothL1Loss(nn.Module):
+    """
+    SmoothL1Loss that weights errors by target magnitude.
+    Higher SWE values get higher penalty for errors.
+    """
+    def __init__(self, beta=1.0, weight_power=1.0):
+        """
+        Args:
+            beta: SmoothL1Loss transition point (quadratic to linear)
+            weight_power: Exponent for weighting (1.0 = linear, 2.0 = quadratic)
+        """
+        super(WeightedSmoothL1Loss, self).__init__()
+        self.beta = beta
+        self.weight_power = weight_power
     
-#     def forward(self, pred, target):
-#         """
-#         Args:
-#             pred: Model predictions
-#             target: Ground truth labels
-#         """
-#         # Compute difference
-#         diff = pred - target
-#         abs_diff = torch.abs(diff)
+    def forward(self, pred, target):
+        """
+        Args:
+            pred: Model predictions
+            target: Ground truth labels
+        """
+        # Compute difference
+        diff = pred - target
+        abs_diff = torch.abs(diff)
         
-#         # Smooth L1: quadratic when |error| < beta, linear when |error| >= beta
-#         loss = torch.where(
-#             abs_diff < self.beta,
-#             0.5 * (diff ** 2) / self.beta,
-#             abs_diff - 0.5 * self.beta
-#         )
+        # Smooth L1: quadratic when |error| < beta, linear when |error| >= beta
+        loss = torch.where(
+            abs_diff < self.beta,
+            0.5 * (diff ** 2) / self.beta,
+            abs_diff - 0.5 * self.beta
+        )
         
-#         # Weight by target magnitude (higher SWE = more penalty)
-#         weights = (torch.abs(target) + 1.0) ** self.weight_power
+        # Weight by target magnitude (higher SWE = more penalty)
+        weights = (torch.abs(target) + 1.0) ** self.weight_power
         
-#         # Apply weights and return mean
-#         return (loss * weights).mean()
+        # Apply weights and return mean
+        return (loss * weights).mean()
 
 class TailFocusedLoss(nn.Module):
     def __init__(self, quantile=0.75, magnitude_power=1.0, use_smooth=False, beta=1.0):
@@ -1051,17 +1060,17 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
     #IPython.embed()
-    num_epochs = 40 #10 #1000
+    num_epochs = 10 #10 #1000
     batch_size = 16
     learning_rate = 1e-5 #0.01 ### learning rate start it really small? it will take longer to learn though 
-    patience = 20 #400
+    patience = 10 #400
     
     # Patching config
     patch_size = 256 #128
     stride = int(patch_size/ 2) #64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./checkpoints_elevPM_NDSI_CC_1e-5_ps256_tailfocisedLoss_w2"
+    checkpoint_dir = "./checkpoints_elevPM_NDSI_CC_1e-5_ps256_smoothL1loss_150"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
@@ -1187,7 +1196,7 @@ def main():
             self.masks = labels_masks
         
         def __len__(self):
-            return len(self.data) #150
+            return len(self.data) // 150
         
         def __getitem__(self, idx):
             # Data already patched, just return
@@ -1220,8 +1229,8 @@ def main():
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
     
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
-    #criterion = nn.SmoothL1Loss(beta=1.0) #nn.MSELoss() #nn.L1Loss()
-    criterion = TailFocusedLoss(quantile=0.8, magnitude_power=1.5, use_smooth=False)
+    criterion = nn.SmoothL1Loss(beta=1.0) #nn.MSELoss() #nn.L1Loss()
+    #criterion = TailFocusedLoss(quantile=0.8, magnitude_power=1.5, use_smooth=False)
     # class ValueWeightedMSELoss(nn.Module):
     #     def __init__(self, alpha=1.0):
     #         super().__init__()
