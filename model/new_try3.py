@@ -452,7 +452,7 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         # ========================================
         if skip_tb_channels:
             channels_to_keep = [2, 3, 4, 5, 6, 7, 8] ## canopy cover + elevation + passive microwave + viirs NDSI
-            IPython.embed()
+            #IPython.embed()
             #X = X[channels_to_keep, :, :]
             # ========================================
             # CREATE NaN MASK CHANNEL
