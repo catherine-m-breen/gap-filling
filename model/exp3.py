@@ -1070,7 +1070,7 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
     #IPython.embed()
-    num_epochs = 30 #10 #1000
+    num_epochs = 10 #10 #1000
     batch_size = 16
     learning_rate = 1e-6 #0.01 ### learning rate start it really small? it will take longer to learn though 
     patience = 5 #400
