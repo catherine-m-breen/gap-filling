@@ -920,7 +920,7 @@ def evaluate_test_set(model, test_x, test_y, test_mask, y_mean, y_std, device, c
     print(f"Saved residual plots to {residual_path}")
     
     import pandas as pd
-    csv = pd.DataFrame({'predictions': preds_meters, 'targets': labels_meters})
+    csv = pd.DataFrame({'predictions': preds_meters[:100], 'targets': labels_meters[:100]})
     csv_path = os.path.join(checkpoint_dir, 'results.csv')
     csv.to_csv(csv_path)
     return {
