@@ -1244,7 +1244,7 @@ def main():
     
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
     #criterion = nn.SmoothL1Loss(beta=1.0) #nn.MSELoss() #nn.L1Loss()
-    criterion = WeightedSmoothL1Loss(beta=1.0, weight_power=2.0)
+    criterion = WeightedSmoothL1Loss(beta=1.0, weight_power=1.0)
     #criterion = TailFocusedLoss(quantile=0.8, magnitude_power=1.5, use_smooth=False)
     # class ValueWeightedMSELoss(nn.Module):
     #     def __init__(self, alpha=1.0):
@@ -1261,7 +1261,7 @@ def main():
 
     # criterion = ValueWeightedMSELoss(alpha=2.0)   
 
-    scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-6)
+    scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-10)
     
     train_exp = True
     if train_exp == True:
