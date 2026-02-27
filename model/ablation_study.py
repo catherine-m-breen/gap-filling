@@ -418,7 +418,7 @@ def plot_feature_importance(ablation_results, permutation_results, baseline_metr
     axes[1].set_title('Feature Ablation\n(Higher = More Important)', fontsize=14, fontweight='bold')
     axes[1].grid(axis='x', alpha=0.3)
     
-    # Permutation importance
+    # # Permutation importance
     perm_means = [permutation_results[f]['importance_mean'] for f in features]
     perm_stds = [permutation_results[f]['importance_std'] for f in features]
     axes[2].barh(features, perm_means, xerr=perm_stds, color='seagreen', 
@@ -585,15 +585,16 @@ def plot_feature_importance(ablation_results, permutation_results, baseline_metr
     # Prepare data for heatmap
     all_features = list(FEATURE_GROUPS.keys())
     metrics = ['MAE Δ', 'RMSE Δ', 'R² Drop', 'Perm. Imp.']
+    metrics = ['RMSE Δ', 'R² Drop']
     
     heatmap_data = []
     for feature in all_features:
         if feature in ablation_results and feature in permutation_results:
             row = [
-                ablation_results[feature]['mae_drop'],
+             #   ablation_results[feature]['mae_drop'],
                 ablation_results[feature]['rmse_drop'],
                 ablation_results[feature]['r2_drop'],
-                permutation_results[feature]['importance_mean']
+              #  permutation_results[feature]['importance_mean']
             ]
             heatmap_data.append(row)
         else:
@@ -749,8 +750,8 @@ def normalize_dataset_per_channel(test_data, norm_mean, norm_std, skip_channels=
 # Add this new function to your ablation study script
 
 def analyze_importance_by_forest_cover(model, test_x, test_y, test_masks, 
-                                       y_mean, y_std, device, save_dir,
-                                       n_bins=10):
+                                       y_mean, y_std, device, save_dir, norm_mean, norm_std,
+                                       n_bins=20):
     """
     Analyze how feature importance varies with forest cover fraction.
     
@@ -896,6 +897,14 @@ def analyze_importance_by_forest_cover(model, test_x, test_y, test_masks,
     
     # Create bins based on percentiles for equal sample sizes
     # Or use linear bins from min to max
+
+
+    forest_cover_mean = norm_mean[0, 0, 0, 0]  # Channel 0 mean
+    forest_cover_std = norm_std[0, 0, 0, 0]    # Channel 0 std
+
+    # Denormalize to original scale
+    all_forest_cover_denorm = all_forest_cover * forest_cover_std + forest_cover_mean
+    
     forest_cover_bins = np.linspace(all_forest_cover.min(), all_forest_cover.max(), n_bins + 1)
     bin_centers = (forest_cover_bins[:-1] + forest_cover_bins[1:]) / 2
     
@@ -1227,15 +1236,15 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
             # Missing volume (positive = underprediction, negative = overprediction)
             missing_volume_m3 = true_volume_m3 - pred_volume_m3
             
-            # Convert to more intuitive units
-            true_volume_acre_ft = true_volume_m3 / 1233.48  # 1 acre-foot = 1233.48 m³
-            pred_volume_acre_ft = pred_volume_m3 / 1233.48
-            missing_volume_acre_ft = missing_volume_m3 / 1233.48
+            # # Convert to more intuitive units
+            # true_volume_acre_ft = true_volume_m3 / 1233.48  # 1 acre-foot = 1233.48 m³
+            # pred_volume_acre_ft = pred_volume_m3 / 1233.48
+            # missing_volume_acre_ft = missing_volume_m3 / 1233.48
             
-            # Metric tons (1 m³ water ≈ 1 metric ton)
-            true_volume_metric_tons = true_volume_m3
-            pred_volume_metric_tons = pred_volume_m3
-            missing_volume_metric_tons = missing_volume_m3
+            # # Metric tons (1 m³ water ≈ 1 metric ton)
+            # true_volume_metric_tons = true_volume_m3
+            # pred_volume_metric_tons = pred_volume_m3
+            # missing_volume_metric_tons = missing_volume_m3
             
             # Percent error
             volume_percent_error = (missing_volume_m3 / true_volume_m3 * 100) if true_volume_m3 > 0 else 0
@@ -1279,13 +1288,13 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
                 'pred_volume_m3': pred_volume_m3,
                 'missing_volume_m3': missing_volume_m3,
                 
-                'true_volume_acre_ft': true_volume_acre_ft,
-                'pred_volume_acre_ft': pred_volume_acre_ft,
-                'missing_volume_acre_ft': missing_volume_acre_ft,
+                # 'true_volume_acre_ft': true_volume_acre_ft,
+                # 'pred_volume_acre_ft': pred_volume_acre_ft,
+                # 'missing_volume_acre_ft': missing_volume_acre_ft,
                 
-                'true_volume_metric_tons': true_volume_metric_tons,
-                'pred_volume_metric_tons': pred_volume_metric_tons,
-                'missing_volume_metric_tons': missing_volume_metric_tons,
+                # 'true_volume_metric_tons': true_volume_metric_tons,
+                # 'pred_volume_metric_tons': pred_volume_metric_tons,
+                # 'missing_volume_metric_tons': missing_volume_metric_tons,
                 
                 'volume_percent_error': volume_percent_error
             })
@@ -1293,9 +1302,9 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
             print(f"  Valid pixels: {n_valid_pixels:,} ({n_valid_pixels * pixel_area_m2 / 1e6:.2f} km²)")
             print(f"  MAE: {mae:.3f} m, RMSE: {rmse:.3f} m, R²: {r2:.3f}")
             print(f"  Mean SWE - True: {mean_true_swe:.3f} m, Pred: {mean_pred_swe:.3f} m")
-            print(f"  Total volume - True: {true_volume_acre_ft:,.0f} acre-ft, "
-                  f"Pred: {pred_volume_acre_ft:,.0f} acre-ft")
-            print(f"  Missing: {missing_volume_acre_ft:+,.0f} acre-ft ({volume_percent_error:+.1f}%)")
+            print(f"  Total volume - True: {true_volume_m3:,.0f} m, "
+                  f"Pred: {true_volume_m3:,.0f} m")
+            print(f"  Missing: {true_volume_m3:+,.0f} m ({volume_percent_error:+.1f}%)")
     
     # ========================================
     # Create DataFrame and compute totals
@@ -1303,12 +1312,12 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
     results_df = pd.DataFrame(flight_results)
     
     # Sort by missing volume (descending - most underpredicted first)
-    results_df = results_df.sort_values('missing_volume_acre_ft', ascending=False)
+    results_df = results_df.sort_values('true_volume_m3', ascending=False)
     
     # Compute totals
-    total_true_volume = results_df['true_volume_acre_ft'].sum()
-    total_pred_volume = results_df['pred_volume_acre_ft'].sum()
-    total_missing_volume = results_df['missing_volume_acre_ft'].sum()
+    total_true_volume = results_df['true_volume_m3'].sum()
+    total_pred_volume = results_df['pred_volume_m3'].sum()
+    total_missing_volume = results_df['missing_volume_m3'].sum()
     total_missing_percent = (total_missing_volume / total_true_volume * 100) if total_true_volume > 0 else 0
     
     total_area_km2 = results_df['area_km2'].sum()
@@ -1331,22 +1340,15 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
     print(f"  Mean RMSE: {mean_rmse:.3f} m")
     print(f"  Mean R²:   {mean_r2:.3f}")
     
-    print(f"\nTotal Water Volume:")
-    print(f"  True:    {total_true_volume:,.0f} acre-feet ({total_true_volume * 1233.48 / 1e9:.3f} km³)")
-    print(f"  Predicted: {total_pred_volume:,.0f} acre-feet ({total_pred_volume * 1233.48 / 1e9:.3f} km³)")
-    print(f"  Missing: {total_missing_volume:+,.0f} acre-feet ({total_missing_percent:+.1f}%)")
-    print(f"           {total_missing_volume * 1233.48 / 1e6:+,.1f} million m³")
-    print(f"           {total_missing_volume * 1233.48:+,.0f} metric tons")
-    
     # Breakdown by over/under prediction
-    overpredicted = results_df[results_df['missing_volume_acre_ft'] < 0]
-    underpredicted = results_df[results_df['missing_volume_acre_ft'] > 0]
+    overpredicted = results_df[results_df['missing_volume_m3'] < 0]
+    underpredicted = results_df[results_df['missing_volume_m3'] > 0]
     
     print(f"\nBreakdown:")
     print(f"  Underpredicted flights: {len(underpredicted)} "
-          f"(missing {underpredicted['missing_volume_acre_ft'].sum():,.0f} acre-ft)")
+          f"(missing {underpredicted['missing_volume_m3'].sum():,.0f} acre-ft)")
     print(f"  Overpredicted flights: {len(overpredicted)} "
-          f"(excess {-overpredicted['missing_volume_acre_ft'].sum():,.0f} acre-ft)")
+          f"(excess {-overpredicted['missing_volume_m3'].sum():,.0f} acre-ft)")
     
     # ========================================
     # Save results
@@ -1361,14 +1363,14 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
     fig, ax = plt.subplots(figsize=(14, 8))
     
     # Color by sign (red = missing, blue = excess)
-    colors = ['red' if x > 0 else 'blue' for x in results_df['missing_volume_acre_ft']]
+    colors = ['red' if x > 0 else 'blue' for x in results_df['missing_volume_m3']]
     
-    bars = ax.barh(range(len(results_df)), results_df['missing_volume_acre_ft'],
+    bars = ax.barh(range(len(results_df)), results_df['missing_volume_m3'],
                    color=colors, alpha=0.7, edgecolor='black')
     
     ax.set_yticks(range(len(results_df)))
     ax.set_yticklabels([f.replace('.tif', '') for f in results_df['flight']], fontsize=8)
-    ax.set_xlabel('Missing SWE (acre-feet)', fontsize=12, fontweight='bold')
+    ax.set_xlabel('Missing SWE (m)', fontsize=12, fontweight='bold')
     ax.set_title('Per-Flight Missing SWE Volume\n(Red = Underprediction, Blue = Overprediction)', 
                  fontsize=14, fontweight='bold')
     ax.axvline(x=0, color='black', linestyle='--', linewidth=2)
@@ -1393,18 +1395,18 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
     # ========================================
     fig, ax = plt.subplots(figsize=(10, 10))
     
-    ax.scatter(results_df['true_volume_acre_ft'], results_df['pred_volume_acre_ft'],
+    ax.scatter(results_df['true_volume_m3'], results_df['pred_volume_m3'],
                c=results_df['volume_percent_error'], cmap='RdBu_r', 
                s=100, alpha=0.7, edgecolors='black', linewidth=1.5,
                vmin=-50, vmax=50)
     
     # 1:1 line
-    max_vol = max(results_df['true_volume_acre_ft'].max(), 
-                  results_df['pred_volume_acre_ft'].max())
+    max_vol = max(results_df['true_volume_m3'].max(), 
+                  results_df['pred_volume_m3'].max())
     ax.plot([0, max_vol], [0, max_vol], 'k--', linewidth=2, alpha=0.5, label='1:1 Line')
     
-    ax.set_xlabel('True SWE Volume (acre-feet)', fontsize=13, fontweight='bold')
-    ax.set_ylabel('Predicted SWE Volume (acre-feet)', fontsize=13, fontweight='bold')
+    ax.set_xlabel('True SWE Volume (m)', fontsize=13, fontweight='bold')
+    ax.set_ylabel('Predicted SWE Volume (m)', fontsize=13, fontweight='bold')
     ax.set_title('Per-Flight Total SWE Volume: Predicted vs True', 
                  fontsize=15, fontweight='bold')
     ax.legend(fontsize=11, loc='upper left')
@@ -1415,8 +1417,8 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
     cbar.set_label('Volume Error (%)', fontsize=11, fontweight='bold')
     
     # Add text with R²
-    volume_r2 = r2_score(results_df['true_volume_acre_ft'], 
-                         results_df['pred_volume_acre_ft'])
+    volume_r2 = r2_score(results_df['true_volume_m3'], 
+                         results_df['pred_volume_m3'])
     textstr = f'R² = {volume_r2:.3f}'
     props = dict(boxstyle='round', facecolor='white', alpha=0.8)
     ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=12,
@@ -1707,8 +1709,8 @@ def main():
     
     forest_cover_results = analyze_importance_by_forest_cover(
         model, test_x_patches_norm, test_y_patches_norm, test_y_mask_patches,
-        y_mean, y_std, device, save_dir,
-        n_bins=10  # Adjust number of bins as needed
+        y_mean, y_std, device, save_dir, norm_mean, norm_std, ## add in this forest cover denorm
+        n_bins=20  # Adjust number of bins as needed
     )
     
     # ========================================
