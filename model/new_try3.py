@@ -899,8 +899,7 @@ def evaluate_test_set(model, test_x, test_y, test_mask, y_mean, y_std, device, c
     # Add 1:1 line
     max_val = max(plot_labels.max(), plot_preds.max())
     min_val = min(plot_labels.min(), plot_preds.min())
-    ax.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, 
-            label='1:1 Line', alpha=0.8)
+    ax.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2)
     
     # Labels and title
     ax.set_xlabel('Actual SWE (m)', fontsize=14, fontweight='bold')
@@ -916,8 +915,8 @@ def evaluate_test_set(model, test_x, test_y, test_mask, y_mean, y_std, device, c
             verticalalignment='top', bbox=props)
     
     ax.legend(fontsize=12, loc='lower right')
-    ax.set_ylim(0,2)
-    ax.set_xlim(0,2)
+    ax.set_ylim(0,4)
+    ax.set_xlim(0,4)
     ax.grid(True, alpha=0.3)
     ax.set_aspect('equal', adjustable='box')
     
@@ -1081,7 +1080,7 @@ def main():
     stride = int(patch_size/ 2) #64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./exp2_elevPM_NDSI_CC_1e-6_ps256_W3_smoothL1loss"
+    checkpoint_dir = "./exp2_elevPM_NDSI_CC_1e-6_ps256_W2_smoothL1loss"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
@@ -1243,7 +1242,7 @@ def main():
     
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
     #criterion = nn.SmoothL1Loss(beta=1.0) #nn.MSELoss() #nn.L1Loss()
-    criterion = WeightedSmoothL1Loss(beta=1.0, weight_power=3.0)
+    criterion = WeightedSmoothL1Loss(beta=1.0, weight_power=2.0)
     #criterion = TailFocusedLoss(quantile=0.8, magnitude_power=1.5, use_smooth=False)
     # class ValueWeightedMSELoss(nn.Module):
     #     def __init__(self, alpha=1.0):
