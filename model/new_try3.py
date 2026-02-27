@@ -1358,20 +1358,24 @@ def main():
     print("\nNormalizing test data...")
     #### right now just using the train data ...... becuase it should overfit
     ###### need to add the mask ######
-    # test_x_norm = []
-    # for data in train_x:
-    #     normalized = (data - norm_mean) / (norm_std + 1e-7)
-    #     test_x_norm.append(normalized)
+    test_x_norm = []
+    for data in test_x:
+        normalized = (data - norm_mean) / (norm_std + 1e-7)
+        test_x_norm.append(normalized)
     
-    # #test_y_log = [np.log1p(y) for y in train_y]
-    # test_y_norm = [(y - y_mean) / (y_std + 1e-7) for y in train_y]
+    #test_y_log = [np.log1p(y) for y in train_y]
+    test_y_log = [np.log1p(y) for y in test_y]
+    test_y_norm = [(y - y_mean) / (y_std + 1e-7) for y in test_y_log]
     
     # Evaluate on test set
     test_results = evaluate_test_set(
         model, 
-        train_x_norm, 
-        train_y_norm, 
-        train_y_mask_patched,  # add the masks
+        # train_x_norm, 
+        # train_y_norm, 
+        # train_y_mask_patched,  # add the masks
+        test_x_norm, 
+        test_y_norm,
+        test_y_mask_patched,
         y_mean, 
         y_std, 
         device, 
