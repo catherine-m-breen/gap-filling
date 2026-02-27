@@ -1074,15 +1074,15 @@ def main():
     #IPython.embed()
     num_epochs = 10 #10 #1000
     batch_size = 16
-    learning_rate = 1e-5 #0.01 ### learning rate start it really small? it will take longer to learn though 
-    patience = 5 #400
+    learning_rate = 1e-6 #0.01 ### learning rate start it really small? it will take longer to learn though 
+    patience = 10 #400
     
     # Patching config
     patch_size = 256 #128
     stride = int(patch_size/ 2) #64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./exp3_elevPM_NDSI_CC_1e-6_ps256_W2_smoothL1loss"
+    checkpoint_dir = "./exp3_elevPM_NDSI_CC_1e-6_ps256_SmoothL1Loss"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
@@ -1210,7 +1210,7 @@ def main():
             self.masks = labels_masks
         
         def __len__(self):
-            return len(self.data) // 150
+            return len(self.data) #// 150
         
         def __getitem__(self, idx):
             # Data already patched, just return
@@ -1244,8 +1244,8 @@ def main():
     
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
     #criterion = nn.SmoothL1Loss(beta=1.0) #nn.MSELoss() #nn.L1Loss()
-    criterion = WeightedSmoothL1Loss(beta=1.0, weight_power=2.0)
-    #criterion = nn.SmoothL1Loss(beta=1.0)
+    #criterion = WeightedSmoothL1Loss(beta=1.0, weight_power=2.0)
+    criterion = nn.SmoothL1Loss(beta=1.0)
 
     #criterion = TailFocusedLoss(quantile=0.8, magnitude_power=1.5, use_smooth=False)
     # class ValueWeightedMSELoss(nn.Module):

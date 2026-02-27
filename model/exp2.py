@@ -1081,7 +1081,7 @@ def main():
     stride = int(patch_size/ 2) #64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./exp2_elevPM_NDSI_CC_1e-6_ps256_W2_smoothL1loss"
+    checkpoint_dir = "./exp2_elevPM_NDSI_CC_1e-6_ps256_W2_smoothL1loss_full"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
