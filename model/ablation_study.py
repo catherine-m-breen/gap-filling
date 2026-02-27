@@ -1577,6 +1577,9 @@ def main():
     zarr_dir = "/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks"
     save_dir = os.path.join(checkpoint_dir, "ablation_study")
     
+    os.makedirs(save_dir, exist_ok=True)  # ← ADD THIS LINE HERE
+    print(f"Results will be saved to: {save_dir}")
+
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     
