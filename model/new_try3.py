@@ -532,8 +532,8 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         Y[Y > 10.0] = np.nan  # No SWE over 10m
 
         #### should just be one line of code 
-        canopy_cover = X[0, :, :]  # Get canopy cover channel (H, W)
-        Y[canopy_cover <= 40] = np.nan  # Mask out pixels with <=40% canopy cover
+        # canopy_cover = X[0, :, :]  # Get canopy cover channel (H, W)
+        # Y[canopy_cover <= 40] = np.nan  # Mask out pixels with <=40% canopy cover
 
         Y_mask = ~np.isnan(Y)  # Boolean mask: True where valid, False where NaN ## pass this through so we can only look where we have data! 
 
@@ -1080,7 +1080,7 @@ def main():
     stride = int(patch_size/ 2) #64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./exp2_elevPM_NDSI_CC_1e-6_ps256_W2_smoothL1loss"
+    checkpoint_dir = "./exp1_elevPM_NDSI_CC_1e-6_ps256_W2_smoothL1loss"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
