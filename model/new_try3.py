@@ -451,7 +451,7 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         # SKIP BRIGHTNESS TEMPERATURE CHANNELS
         # ========================================
         if skip_tb_channels:
-            channels_to_keep = [3, 4, 5, 6, 7] ## elevation + passive microwave
+            channels_to_keep = [2, 3, 4, 5, 6, 7, 8] ## canopy cover + elevation + passive microwave + viirs NDSI
             X = X[channels_to_keep, :, :]
 
             # ========================================
@@ -473,6 +473,20 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
             if len(train_x) == 0:  # Only print once
                 print(f"  Not all channels, X shape: {X.shape[0]} channels")
         
+
+                ### add the noisy SWE channel to X ### 
+        # new_channel = Y[X[9] == 0] ## the unforested locations + gaussian error 
+        # mask = (X[9] == 0)  # True where unforested
+
+        # new_channel = np.zeros_like(Y)  # same shape as Y
+        # new_channel[mask] = Y[mask]     # keep SWE only in unforested areas
+
+        # # Add Gaussian noise only to those pixels
+        # noise = np.random.normal(loc=0, scale=sigma, size=Y.shape)
+        # new_channel[mask] += noise[mask]
+        ## then you need to concantenate this at the end!!! 
+
+
         # Handle invalid values
         Y[Y < 0] = np.nan  # No negative SWE
         # ========================================
@@ -497,6 +511,10 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         
         # Now cap the values
         Y[Y > 10.0] = np.nan  # No SWE over 10m
+
+        #### should just be one line of code 
+        #### Y[X[9] == 1] = np.nan ## we want Y values to be where we have FORESTED locations, and everything else will be covered
+
         Y_mask = ~np.isnan(Y)  # Boolean mask: True where valid, False where NaN ## pass this through so we can only look where we have data! 
 
         # Add batch dimension for consistency: (1, C, H, W)
@@ -933,44 +951,96 @@ def evaluate_test_set(model, test_x, test_y, test_mask, y_mean, y_std, device, c
     }
 #+++++++++++++++
 
-class WeightedSmoothL1Loss(nn.Module):
-    """
-    SmoothL1Loss that weights errors by target magnitude.
-    Higher SWE values get higher penalty for errors.
-    """
-    def __init__(self, beta=1.0, weight_power=1.0):
+# class WeightedSmoothL1Loss(nn.Module):
+#     """
+#     SmoothL1Loss that weights errors by target magnitude.
+#     Higher SWE values get higher penalty for errors.
+#     """
+#     def __init__(self, beta=1.0, weight_power=1.0):
+#         """
+#         Args:
+#             beta: SmoothL1Loss transition point (quadratic to linear)
+#             weight_power: Exponent for weighting (1.0 = linear, 2.0 = quadratic)
+#         """
+#         super(WeightedSmoothL1Loss, self).__init__()
+#         self.beta = beta
+#         self.weight_power = weight_power
+    
+#     def forward(self, pred, target):
+#         """
+#         Args:
+#             pred: Model predictions
+#             target: Ground truth labels
+#         """
+#         # Compute difference
+#         diff = pred - target
+#         abs_diff = torch.abs(diff)
+        
+#         # Smooth L1: quadratic when |error| < beta, linear when |error| >= beta
+#         loss = torch.where(
+#             abs_diff < self.beta,
+#             0.5 * (diff ** 2) / self.beta,
+#             abs_diff - 0.5 * self.beta
+#         )
+        
+#         # Weight by target magnitude (higher SWE = more penalty)
+#         weights = (torch.abs(target) + 1.0) ** self.weight_power
+        
+#         # Apply weights and return mean
+#         return (loss * weights).mean()
+
+class TailFocusedLoss(nn.Module):
+    def __init__(self, quantile=0.75, magnitude_power=1.0, use_smooth=False, beta=1.0):
         """
+        Loss that emphasizes right tail (high values) and penalizes underprediction.
+        
         Args:
-            beta: SmoothL1Loss transition point (quadratic to linear)
-            weight_power: Exponent for weighting (1.0 = linear, 2.0 = quadratic)
+            quantile: >0.5 = penalize underprediction more (0.75 = 3x more penalty)
+            magnitude_power: Exponential weighting by |target|. 
+                           0 = no weighting, 1 = linear, 2 = quadratic
+            use_smooth: If True, use Smooth L1; if False, use MSE (better for tails)
+            beta: Smooth L1 threshold (only used if use_smooth=True)
         """
-        super(WeightedSmoothL1Loss, self).__init__()
+        super(TailFocusedLoss, self).__init__()
+        self.quantile = quantile
+        self.magnitude_power = magnitude_power
+        self.use_smooth = use_smooth
         self.beta = beta
-        self.weight_power = weight_power
     
     def forward(self, pred, target):
-        """
-        Args:
-            pred: Model predictions
-            target: Ground truth labels
-        """
-        # Compute difference
         diff = pred - target
-        abs_diff = torch.abs(diff)
         
-        # Smooth L1: quadratic when |error| < beta, linear when |error| >= beta
-        loss = torch.where(
-            abs_diff < self.beta,
-            0.5 * (diff ** 2) / self.beta,
-            abs_diff - 0.5 * self.beta
+        # Base loss: MSE or Smooth L1
+        if self.use_smooth:
+            abs_diff = torch.abs(diff)
+            base_loss = torch.where(
+                abs_diff < self.beta,
+                0.5 * (diff ** 2) / self.beta,
+                abs_diff - 0.5 * self.beta
+            )
+        else:
+            base_loss = diff ** 2  # Standard MSE - better for emphasizing tails
+        
+        # Magnitude weighting: emphasize high |target| values
+        if self.magnitude_power > 0:
+            magnitude_weights = (torch.abs(target) + 1e-6) ** self.magnitude_power
+        else:
+            magnitude_weights = 1.0
+        
+        # Asymmetric weighting: penalize underprediction more
+        # quantile=0.75 means underprediction gets 0.75, overprediction gets 0.25
+        # Effectively 3x more penalty for underprediction
+        asymmetric_weights = torch.where(
+            diff < 0,  # pred < target = underprediction
+            self.quantile,
+            1.0 - self.quantile
         )
         
-        # Weight by target magnitude (higher SWE = more penalty)
-        weights = (torch.abs(target) + 1.0) ** self.weight_power
+        # Combine all weights
+        total_weights = magnitude_weights * asymmetric_weights
         
-        # Apply weights and return mean
-        return (loss * weights).mean()
-
+        return (base_loss * total_weights).mean()
+    
 # ============================================================
 # Main Training Script
 # ============================================================
@@ -984,14 +1054,14 @@ def main():
     num_epochs = 40 #10 #1000
     batch_size = 16
     learning_rate = 1e-5 #0.01 ### learning rate start it really small? it will take longer to learn though 
-    patience = 30 #400
+    patience = 20 #400
     
     # Patching config
     patch_size = 256 #128
     stride = int(patch_size/ 2) #64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./checkpoints_elevPM_1e-5_ps256_weightedL1smooth_w2"
+    checkpoint_dir = "./checkpoints_elevPM_NDSI_CC_1e-5_ps256_tailfocisedLoss_w2"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
@@ -1025,7 +1095,8 @@ def main():
     ## this just takes the nan values and does the normalization that way, it doesn't seem great, but not horrible either
     ### the masks are usually the back half of the dataset
     ## so far everything has 
-    train_x_norm, val_x_norm, norm_mean, norm_std = normalize_dataset_per_channel(train_x, val_x, skip_channels=[5, 6, 7, 8, 9])
+    #[2, 3, 4, 5, 6, 7, 8]
+    train_x_norm, val_x_norm, norm_mean, norm_std = normalize_dataset_per_channel(train_x, val_x, skip_channels=[7, 8, 9, 10, 11, 12, 13])
     
     # Normalize labels (Y) - same approach
     #IPython.embed()
@@ -1089,7 +1160,8 @@ def main():
         
         # Apply noise to X only (not Y)
         ## we will eventually want to make this the first half of the images 
-        x_noisy = add_gaussian_noise(x_flip, mean=0, sigma=0.1, noise_channels=[0,1,2,3,4]) ## just do the first channel
+        ## just drop gaussian for now
+        x_noisy = x_flip #add_gaussian_noise(x_flip, mean=0, sigma=0.1, noise_channels=[0,1,2,3,4]) ## just do the first channel
         
         augmented_x.append(x_noisy)
         augmented_y.append(y_flip)
@@ -1149,7 +1221,7 @@ def main():
     
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
     #criterion = nn.SmoothL1Loss(beta=1.0) #nn.MSELoss() #nn.L1Loss()
-    criterion = WeightedSmoothL1Loss(beta=1.0, weight_power=2.0)
+    criterion = TailFocusedLoss(quantile=0.8, magnitude_power=1.5, use_smooth=False)
     # class ValueWeightedMSELoss(nn.Module):
     #     def __init__(self, alpha=1.0):
     #         super().__init__()

@@ -472,7 +472,19 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
             if len(train_x) == 0:  # Only print once
                 print(f"  Not all channels, X shape: {X.shape[0]} channels")
         
-        # Handle invalid values
+        ### add the noisy SWE channel to X ### 
+        # new_channel = Y[X[9] == 0] ## the unforested locations + gaussian error 
+        # mask = (X[9] == 0)  # True where unforested
+
+        # new_channel = np.zeros_like(Y)  # same shape as Y
+        # new_channel[mask] = Y[mask]     # keep SWE only in unforested areas
+
+        # # Add Gaussian noise only to those pixels
+        # noise = np.random.normal(loc=0, scale=sigma, size=Y.shape)
+        # new_channel[mask] += noise[mask]
+        ## then you need to concantenate this at the end!!! 
+
+        # Handle invalid Y values
         Y[Y < 0] = np.nan  # No negative SWE
         # ========================================
         # CHECK FOR EXTREME Y VALUES (BEFORE CAPPING)
@@ -496,6 +508,10 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         
         # Now cap the values
         Y[Y > 10.0] = np.nan  # No SWE over 10m
+
+        ## for the forested experiment we want this: 
+        #Y[X[9] == 1] = np.nan
+        ## 
         Y_mask = ~np.isnan(Y)  # Boolean mask: True where valid, False where NaN ## pass this through so we can only look where we have data! 
 
         # Add batch dimension for consistency: (1, C, H, W)

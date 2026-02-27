@@ -132,7 +132,7 @@ for aso_flight in asopath:
 
     # Create forest masks
     canopy = predictors[2]
-    forested = (canopy > 40).astype("float32")
+    forested = (canopy > 40).astype("float32") ## forested are 1! 
    # unforested = (canopy <= 40).astype("float32")
 
     # Stack everything
