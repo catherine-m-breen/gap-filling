@@ -916,6 +916,10 @@ def evaluate_test_set(model, test_x, test_y, test_mask, y_mean, y_std, device, c
     plt.savefig(residual_path, dpi=150, bbox_inches='tight')
     print(f"Saved residual plots to {residual_path}")
     
+    import pandas as pd
+    csv = pd.DataFrame({'predictions': preds_meters, 'targets': labels_meters})
+    csv_path = os.path.join(checkpoint_dir, 'results.csv')
+    csv.to_csv(csv_path)
     return {
         'mae': mae,
         'rmse': rmse,
@@ -976,7 +980,7 @@ def main():
     #IPython.embed()
     num_epochs = 40 #10 #1000
     batch_size = 16
-    learning_rate = 1e-3 #0.01 ### learning rate start it really small? it will take longer to learn though 
+    learning_rate = 1e-5 #0.01 ### learning rate start it really small? it will take longer to learn though 
     patience = 30 #400
     
     # Patching config
@@ -984,7 +988,7 @@ def main():
     stride = int(patch_size/ 2) #64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./checkpoints_elevation_1e-3_150_ps256_weightedL1smooth_w2"
+    checkpoint_dir = "./checkpoints_elevation_1e-4_ps256_weightedL1smooth_w2"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
