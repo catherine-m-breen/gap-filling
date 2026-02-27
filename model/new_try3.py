@@ -453,34 +453,41 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         if skip_tb_channels:
             channels_to_keep = [2, 3, 4, 5, 6, 7, 8] ## canopy cover + elevation + passive microwave + viirs NDSI
             IPython.embed()
-            X = X[channels_to_keep, :, :]
-            all_but_viirs = X[:6,:,:]
+            #X = X[channels_to_keep, :, :]
             # ========================================
             # CREATE NaN MASK CHANNEL
             # ========================================
             # Create binary mask: 1 = valid data, 0 = NaN
             #X[X == -9999] = np.nan
-            all_but_viirs[all_but_viirs == -9999] = 0
-            all_but_viirs_filled = np.nan_to_num(all_but_viirs, nan=0.0)
             #nan_mask = (~np.isnan(X)).astype(np.float32)
             ## just NDSI
-            nan_mask = (~np.isnan(X[6, :, :])).astype(np.float32)
             
             # Fill NaN in original data with 0 (or mean)
             #X_filled = np.nan_to_num(X, nan=0.0)
-
-            ## just NDSI
-            X_filled = np.nan_to_num(X[6, :, :], nan=0.0)    
-            viirs_filled = X_filled[np.newaxis, :, :]  # (1, H, W)
-            viirs_mask = nan_mask[np.newaxis, :, :]      # (1, H, W)
             
             # Stack data and mask as separate channels
             # Result: (2, H, W) - channel 0 = data, channel 1 = mask
             ## channel 0, 1, 2, 3, 4 -- elevation, 4 Tbs
             ## channels 5, 6, 7, 8 9 -- elevation 4 Tbs masks
             #X = np.concatenate([X_filled, nan_mask], axis=0)
-            X = np.concatenate([all_but_viirs_filled, viirs_filled, viirs_mask], axis=0)
+            #X = np.concatenate([all_but_viirs_filled, viirs_filled, viirs_mask], axis=0)
 
+            viirs_raw = X[8, :, :]  # Get VIIRS from ORIGINAL X
+            viirs_mask = (~np.isnan(viirs_raw)).astype(np.float32)  # Create mask FIRST
+            viirs_filled = np.nan_to_num(viirs_raw, nan=0.0)        # Then fill
+
+            # NOW filter other channels
+            channels_except_viirs = [2, 3, 4, 5, 6, 7]
+            all_but_viirs = X[channels_except_viirs, :, :]
+            all_but_viirs[all_but_viirs == -9999] = 0
+            all_but_viirs_filled = np.nan_to_num(all_but_viirs, nan=0.0)
+
+            # Concatenate
+            X = np.concatenate([
+                all_but_viirs_filled,
+                viirs_filled[np.newaxis, :, :],
+                viirs_mask[np.newaxis, :, :]
+            ], axis=0)
 
             if len(train_x) == 0:  # Only print once
                 print(f"  Not all channels, X shape: {X.shape[0]} channels")
