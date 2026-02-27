@@ -1074,7 +1074,7 @@ def main():
     #IPython.embed()
     num_epochs = 10 #10 #1000
     batch_size = 16
-    learning_rate = 1e-6 #0.01 ### learning rate start it really small? it will take longer to learn though 
+    learning_rate = 1e-7 #0.01 ### learning rate start it really small? it will take longer to learn though 
     patience = 5 #400
     
     # Patching config
@@ -1244,7 +1244,9 @@ def main():
     
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
     #criterion = nn.SmoothL1Loss(beta=1.0) #nn.MSELoss() #nn.L1Loss()
-    criterion = WeightedSmoothL1Loss(beta=1.0, weight_power=1.0)
+    #criterion = WeightedSmoothL1Loss(beta=1.0, weight_power=1.0)
+    criterion = nn.SmoothL1Loss(beta=1.0)
+
     #criterion = TailFocusedLoss(quantile=0.8, magnitude_power=1.5, use_smooth=False)
     # class ValueWeightedMSELoss(nn.Module):
     #     def __init__(self, alpha=1.0):
@@ -1260,7 +1262,7 @@ def main():
     #         return weighted_loss.mean()
 
     # criterion = ValueWeightedMSELoss(alpha=2.0)   
-
+    ## you can start big and then it decreases the LR so that you take big steps in the beginning and smaller steps at the end 
     scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-10)
     
     train_exp = True
