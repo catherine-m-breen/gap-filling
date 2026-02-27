@@ -1080,7 +1080,7 @@ def main():
     stride = int(patch_size/ 2) #64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./checkpoints_elevPM_NDSI_CC_1e-5_ps256_MSELoss"
+    checkpoint_dir = "./checkpoints_elevPM_NDSI_CC_1e-5_ps256_W_smoothL1loss"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
@@ -1175,6 +1175,7 @@ def main():
     #  train_filenames, train_patch_loc, val_filenames, val_patch_loc, test_filenames, test_patch_loc
     for x, y, z, name, loc in zip(train_x_norm, train_y_norm, train_y_mask_patched, train_filenames, train_patch_loc):
         # Apply flip
+        # if 
         x_flip, y_flip, y_mask_flip = random_flip(x, y, z)
         
         # Apply noise to X only (not Y)
@@ -1182,6 +1183,7 @@ def main():
         ## just drop gaussian for now
         x_noisy = x_flip #add_gaussian_noise(x_flip, mean=0, sigma=0.1, noise_channels=[0,1,2,3,4]) ## just do the first channel
         
+        # if y[z]
         augmented_x.append(x_noisy)
         augmented_y.append(y_flip)
         augmented_y_masks.append(y_mask_flip)
@@ -1239,7 +1241,8 @@ def main():
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
     
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
-    criterion = nn.SmoothL1Loss(beta=1.0) #nn.MSELoss() #nn.L1Loss()
+    #criterion = nn.SmoothL1Loss(beta=1.0) #nn.MSELoss() #nn.L1Loss()
+    criterion = WeightedSmoothL1Loss(beta=1.0, weight_power=1.0)
     #criterion = TailFocusedLoss(quantile=0.8, magnitude_power=1.5, use_smooth=False)
     # class ValueWeightedMSELoss(nn.Module):
     #     def __init__(self, alpha=1.0):
