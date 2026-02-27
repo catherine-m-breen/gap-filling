@@ -1573,7 +1573,7 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
 # ============================================================
 def main():
     # CONFIGURATION - MODIFY THESE PATHS
-    checkpoint_dir = "./checkpoints_elevPM_NDSI_CC_1e-5_ps256_W_smoothL1loss"  # MODIFY THIS
+    checkpoint_dir = "/discover/nobackup/cmbreen/gap-filling/checkpoints_elevPM_NDSI_CC_1e-5_ps256_W_smoothL1loss"  # MODIFY THIS
     zarr_dir = "/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks"
     save_dir = os.path.join(checkpoint_dir, "ablation_study")
     
