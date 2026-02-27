@@ -3,7 +3,8 @@
 
 '''
 same thing as new_try2 but works with full zarr data
-### let's see we can make it work with the unforested locations
+#### this is for all pixels!!! 
+### Right now we are predicting all pixels aso with elevation and 4tb 
 '''
 
 import numpy as np
@@ -450,29 +451,49 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         # SKIP BRIGHTNESS TEMPERATURE CHANNELS
         # ========================================
         if skip_tb_channels:
-            channels_to_keep = [3, 4, 5, 6, 7] ## elevation + passive microwave
-            X = X[channels_to_keep, :, :]
-
+            channels_to_keep = [2, 3, 4, 5, 6, 7, 8] ## canopy cover + elevation + passive microwave + viirs NDSI
+            #IPython.embed()
+            #X = X[channels_to_keep, :, :]
             # ========================================
             # CREATE NaN MASK CHANNEL
             # ========================================
             # Create binary mask: 1 = valid data, 0 = NaN
-            X[X == -9999] = np.nan
-            nan_mask = (~np.isnan(X)).astype(np.float32)
+            #X[X == -9999] = np.nan
+            #nan_mask = (~np.isnan(X)).astype(np.float32)
+            ## just NDSI
             
             # Fill NaN in original data with 0 (or mean)
-            X_filled = np.nan_to_num(X, nan=0.0)
+            #X_filled = np.nan_to_num(X, nan=0.0)
             
             # Stack data and mask as separate channels
             # Result: (2, H, W) - channel 0 = data, channel 1 = mask
             ## channel 0, 1, 2, 3, 4 -- elevation, 4 Tbs
             ## channels 5, 6, 7, 8 9 -- elevation 4 Tbs masks
-            X = np.concatenate([X_filled, nan_mask], axis=0)
+            #X = np.concatenate([X_filled, nan_mask], axis=0)
+            #X = np.concatenate([all_but_viirs_filled, viirs_filled, viirs_mask], axis=0)
+
+            viirs_raw = X[8, :, :]  # Get VIIRS from ORIGINAL X
+            viirs_mask = (~np.isnan(viirs_raw)).astype(np.float32)  # Create mask FIRST
+            viirs_filled = np.nan_to_num(viirs_raw, nan=0.0)        # Then fill
+
+            # NOW filter other channels
+            channels_except_viirs = [2, 3, 4, 5, 6, 7]
+            all_but_viirs = X[channels_except_viirs, :, :]
+            all_but_viirs[all_but_viirs == -9999] = 0
+            all_but_viirs_filled = np.nan_to_num(all_but_viirs, nan=0.0)
+
+            # Concatenate
+            X = np.concatenate([
+                all_but_viirs_filled,
+                viirs_filled[np.newaxis, :, :],
+                viirs_mask[np.newaxis, :, :]
+            ], axis=0)
 
             if len(train_x) == 0:  # Only print once
                 print(f"  Not all channels, X shape: {X.shape[0]} channels")
         
-        ### add the noisy SWE channel to X ### 
+
+                ### add the noisy SWE channel to X ### 
         # new_channel = Y[X[9] == 0] ## the unforested locations + gaussian error 
         # mask = (X[9] == 0)  # True where unforested
 
@@ -484,7 +505,8 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         # new_channel[mask] += noise[mask]
         ## then you need to concantenate this at the end!!! 
 
-        # Handle invalid Y values
+
+        # Handle invalid values
         Y[Y < 0] = np.nan  # No negative SWE
         # ========================================
         # CHECK FOR EXTREME Y VALUES (BEFORE CAPPING)
@@ -509,14 +531,16 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         # Now cap the values
         Y[Y > 10.0] = np.nan  # No SWE over 10m
 
-        ## for the forested experiment we want this: 
-        #Y[X[9] == 1] = np.nan
-        ## 
+        #### should just be one line of code 
+        # canopy_cover = X[0, :, :]  # Get canopy cover channel (H, W)
+        # Y[0, canopy_cover <= 40] = np.nan  #
+
         Y_mask = ~np.isnan(Y)  # Boolean mask: True where valid, False where NaN ## pass this through so we can only look where we have data! 
 
         # Add batch dimension for consistency: (1, C, H, W)
         X = X[None, :, :, :]
         Y = Y[None, :, :, :]
+        #Y_mask = Y_mask[None, :, :]
         Y_mask = Y_mask[None, :, :, :]
         
         if len(train_x) == 0:  # Only print once
@@ -876,8 +900,7 @@ def evaluate_test_set(model, test_x, test_y, test_mask, y_mean, y_std, device, c
     # Add 1:1 line
     max_val = max(plot_labels.max(), plot_preds.max())
     min_val = min(plot_labels.min(), plot_preds.min())
-    ax.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, 
-            label='1:1 Line', alpha=0.8)
+    ax.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2)
     
     # Labels and title
     ax.set_xlabel('Actual SWE (m)', fontsize=14, fontweight='bold')
@@ -893,8 +916,8 @@ def evaluate_test_set(model, test_x, test_y, test_mask, y_mean, y_std, device, c
             verticalalignment='top', bbox=props)
     
     ax.legend(fontsize=12, loc='lower right')
-    ax.set_ylim(0,5)
-    ax.set_xlim(0,5)
+    ax.set_ylim(0,4)
+    ax.set_xlim(0,4)
     ax.grid(True, alpha=0.3)
     ax.set_aspect('equal', adjustable='box')
     
@@ -935,7 +958,7 @@ def evaluate_test_set(model, test_x, test_y, test_mask, y_mean, y_std, device, c
     print(f"Saved residual plots to {residual_path}")
     
     import pandas as pd
-    csv = pd.DataFrame({'predictions': preds_meters, 'targets': labels_meters})
+    csv = pd.DataFrame({'predictions': preds_meters[:100], 'targets': labels_meters[:100]})
     csv_path = os.path.join(checkpoint_dir, 'results.csv')
     csv.to_csv(csv_path)
     return {
@@ -986,6 +1009,58 @@ class WeightedSmoothL1Loss(nn.Module):
         # Apply weights and return mean
         return (loss * weights).mean()
 
+class TailFocusedLoss(nn.Module):
+    def __init__(self, quantile=0.75, magnitude_power=1.0, use_smooth=False, beta=1.0):
+        """
+        Loss that emphasizes right tail (high values) and penalizes underprediction.
+        
+        Args:
+            quantile: >0.5 = penalize underprediction more (0.75 = 3x more penalty)
+            magnitude_power: Exponential weighting by |target|. 
+                           0 = no weighting, 1 = linear, 2 = quadratic
+            use_smooth: If True, use Smooth L1; if False, use MSE (better for tails)
+            beta: Smooth L1 threshold (only used if use_smooth=True)
+        """
+        super(TailFocusedLoss, self).__init__()
+        self.quantile = quantile
+        self.magnitude_power = magnitude_power
+        self.use_smooth = use_smooth
+        self.beta = beta
+    
+    def forward(self, pred, target):
+        diff = pred - target
+        
+        # Base loss: MSE or Smooth L1
+        if self.use_smooth:
+            abs_diff = torch.abs(diff)
+            base_loss = torch.where(
+                abs_diff < self.beta,
+                0.5 * (diff ** 2) / self.beta,
+                abs_diff - 0.5 * self.beta
+            )
+        else:
+            base_loss = diff ** 2  # Standard MSE - better for emphasizing tails
+        
+        # Magnitude weighting: emphasize high |target| values
+        if self.magnitude_power > 0:
+            magnitude_weights = (torch.abs(target) + 1e-6) ** self.magnitude_power
+        else:
+            magnitude_weights = 1.0
+        
+        # Asymmetric weighting: penalize underprediction more
+        # quantile=0.75 means underprediction gets 0.75, overprediction gets 0.25
+        # Effectively 3x more penalty for underprediction
+        asymmetric_weights = torch.where(
+            diff < 0,  # pred < target = underprediction
+            self.quantile,
+            1.0 - self.quantile
+        )
+        
+        # Combine all weights
+        total_weights = magnitude_weights * asymmetric_weights
+        
+        return (base_loss * total_weights).mean()
+    
 # ============================================================
 # Main Training Script
 # ============================================================
@@ -996,17 +1071,17 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
     #IPython.embed()
-    num_epochs = 40 #10 #1000
+    num_epochs = 30 #10 #1000
     batch_size = 16
-    learning_rate = 1e-5 #0.01 ### learning rate start it really small? it will take longer to learn though 
-    patience = 30 #400
+    learning_rate = 1e-6 #0.01 ### learning rate start it really small? it will take longer to learn though 
+    patience = 5 #400
     
     # Patching config
     patch_size = 256 #128
     stride = int(patch_size/ 2) #64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./checkpoints_elevation_1e-4_ps256_weightedL1smooth_w2"
+    checkpoint_dir = "./exp1_elevPM_NDSI_CC_1e-6_ps256_W2_smoothL1loss"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
@@ -1040,7 +1115,8 @@ def main():
     ## this just takes the nan values and does the normalization that way, it doesn't seem great, but not horrible either
     ### the masks are usually the back half of the dataset
     ## so far everything has 
-    train_x_norm, val_x_norm, norm_mean, norm_std = normalize_dataset_per_channel(train_x, val_x, skip_channels=[5, 6, 7, 8, 9])
+    #[2, 3, 4, 5, 6, 7, 8]
+    train_x_norm, val_x_norm, norm_mean, norm_std = normalize_dataset_per_channel(train_x, val_x, skip_channels=[7, 8, 9, 10, 11, 12, 13])
     
     # Normalize labels (Y) - same approach
     #IPython.embed()
@@ -1100,12 +1176,15 @@ def main():
     #  train_filenames, train_patch_loc, val_filenames, val_patch_loc, test_filenames, test_patch_loc
     for x, y, z, name, loc in zip(train_x_norm, train_y_norm, train_y_mask_patched, train_filenames, train_patch_loc):
         # Apply flip
+        # if 
         x_flip, y_flip, y_mask_flip = random_flip(x, y, z)
         
         # Apply noise to X only (not Y)
         ## we will eventually want to make this the first half of the images 
-        x_noisy = add_gaussian_noise(x_flip, mean=0, sigma=0.1, noise_channels=[0,1,2,3,4]) ## just do the first channel
+        ## just drop gaussian for now
+        x_noisy = x_flip #add_gaussian_noise(x_flip, mean=0, sigma=0.1, noise_channels=[0,1,2,3,4]) ## just do the first channel
         
+        # if y[z]
         augmented_x.append(x_noisy)
         augmented_y.append(y_flip)
         augmented_y_masks.append(y_mask_flip)
@@ -1130,7 +1209,7 @@ def main():
             self.masks = labels_masks
         
         def __len__(self):
-            return len(self.data) #150
+            return len(self.data) #// 150
         
         def __getitem__(self, idx):
             # Data already patched, just return
@@ -1165,6 +1244,7 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
     #criterion = nn.SmoothL1Loss(beta=1.0) #nn.MSELoss() #nn.L1Loss()
     criterion = WeightedSmoothL1Loss(beta=1.0, weight_power=2.0)
+    #criterion = TailFocusedLoss(quantile=0.8, magnitude_power=1.5, use_smooth=False)
     # class ValueWeightedMSELoss(nn.Module):
     #     def __init__(self, alpha=1.0):
     #         super().__init__()
@@ -1279,20 +1359,24 @@ def main():
     print("\nNormalizing test data...")
     #### right now just using the train data ...... becuase it should overfit
     ###### need to add the mask ######
-    # test_x_norm = []
-    # for data in train_x:
-    #     normalized = (data - norm_mean) / (norm_std + 1e-7)
-    #     test_x_norm.append(normalized)
+    test_x_norm = []
+    for data in test_x:
+        normalized = (data - norm_mean) / (norm_std + 1e-7)
+        test_x_norm.append(normalized)
     
-    # #test_y_log = [np.log1p(y) for y in train_y]
-    # test_y_norm = [(y - y_mean) / (y_std + 1e-7) for y in train_y]
+    #test_y_log = [np.log1p(y) for y in train_y]
+    test_y_log = [np.log1p(y) for y in test_y]
+    test_y_norm = [(y - y_mean) / (y_std + 1e-7) for y in test_y_log]
     
     # Evaluate on test set
     test_results = evaluate_test_set(
         model, 
-        train_x_norm, 
-        train_y_norm, 
-        train_y_mask_patched,  # add the masks
+        # train_x_norm, 
+        # train_y_norm, 
+        # train_y_mask_patched,  # add the masks
+        test_x_norm, 
+        test_y_norm,
+        test_y_mask_patched,
         y_mean, 
         y_std, 
         device, 
