@@ -1573,13 +1573,13 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
 # ============================================================
 # Update main() to call this function
 # ============================================================
-def main():
+def run(folder):
     # CONFIGURATION - MODIFY THESE PATHS
-    checkpoint_dir = "/discover/nobackup/cmbreen/gap-filling/checkpoints_elevPM_NDSI_CC_1e-5_ps256_W_smoothL1loss"  # MODIFY THIS
+    checkpoint_dir = f"/discover/nobackup/cmbreen/gap-filling/{folder}"  # MODIFY THIS
     zarr_dir = "/discover/nobackup/cmbreen/gap-filling-data/zarr_chunks"
     save_dir = os.path.join(checkpoint_dir, "ablation_study")
     
-    os.makedirs(save_dir, exist_ok=True)  # ← ADD THIS LINE HERE
+    os.makedirs(save_dir, exist_ok=True)  #
     print(f"Results will be saved to: {save_dir}")
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -1749,6 +1749,16 @@ def main():
     print("  - importance_vs_forest_cover.csv")
     print("  - Multiple visualization PNGs")
     print("="*80)
+
+
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description='model folder')
+    parser.add_argument('--folder', type=str,
+    default='checkpoints_elevPM_NDSI_CC_1e-5_ps256_W_smoothL1loss')
+    args = parser.parse_args()
+    run(args.folder)
 
 if __name__ == '__main__':
     main()
