@@ -1980,7 +1980,8 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     print(f"  RMSE: {rmse:.4f} m")
     print(f"  R²:   {r2:.4f}")
     print(f"  Bias: {bias:+.4f} m")
-    
+    import IPython
+    IPython.embed
     # ========================================
     # CREATE VISUALIZATION
     # ========================================
