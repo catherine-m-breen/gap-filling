@@ -14,6 +14,15 @@ Features:
 - Channels 2-5: Passive Microwave (4 channels)
 - Channel 6: VIIRS NDSI
 - Channel 7: VIIRS Mask
+
+
+to run: 
+Exp 1:
+python ablation_study.py --folder "exp1_elevPM_NDSI_CC_1e-6_ps256_W2_smoothL1loss_full"
+
+Exp 2:
+python ablation_study.py --folder "exp2_elevPM_NDSI_CC_1e-6_ps256_W2_smoothL1loss_full"
+
 '''
 
 import numpy as np
@@ -31,10 +40,6 @@ from tqdm import tqdm
 import pandas as pd
 
 print('Starting ablation study...')
-
-# ============================================================
-# Model Definition (must match training script)
-# ============================================================
 
 class Model(nn.Module):
     def __init__(self, input_channels):
@@ -72,9 +77,8 @@ class Model(nn.Module):
         x = x.squeeze(1)
         return x
 
-# ============================================================
-# Evaluation Functions
-# ============================================================
+
+##### EVAL FUNCTIONS ######
 
 def compute_metrics(predictions, targets, masks):
     """Compute MAE, RMSE, R2 on valid (masked) pixels."""
@@ -128,9 +132,9 @@ def evaluate_model(model, test_x, test_y, test_masks, device):
     
     return all_preds, all_labels
 
-# ============================================================
-# Ablation Study Functions
-# ============================================================
+#############
+################### ABLATION STUDY ######################
+#############
 
 def ablate_features(test_x, channel_indices, ablation_type='zero'):
     """
@@ -223,9 +227,9 @@ def permutation_importance(model, test_x, test_y, test_masks, channel_indices,
     
     return mean_importance, std_importance
 
-# ============================================================
-# Feature Group Definitions
-# ============================================================
+## FEATURE GROUPS FOR ABLATION STUDY
+## check what happens if missing channels
+## This is the same for Exp1 and Exp2 because all we are changing is whether we predict forest or unforest pixels 
 
 FEATURE_GROUPS = {
     'Forest Cover': [0],
@@ -242,9 +246,8 @@ FEATURE_GROUPS = {
     'All Remote Sensing': [2, 3, 4, 5, 6]
 }
 
-# ============================================================
-# Main Ablation Study
-# ============================================================
+
+########## Run the ablation study 
 
 def run_ablation_study(checkpoint_dir, test_x, test_y, test_masks, 
                        y_mean, y_std, device, save_dir):
@@ -1302,17 +1305,18 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
             print(f"  Valid pixels: {n_valid_pixels:,} ({n_valid_pixels * pixel_area_m2 / 1e6:.2f} km²)")
             print(f"  MAE: {mae:.3f} m, RMSE: {rmse:.3f} m, R²: {r2:.3f}")
             print(f"  Mean SWE - True: {mean_true_swe:.3f} m, Pred: {mean_pred_swe:.3f} m")
-            print(f"  Total volume - True: {true_volume_m3:,.0f} m, "
-                  f"Pred: {true_volume_m3:,.0f} m")
-            print(f"  Missing: {true_volume_m3:+,.0f} m ({volume_percent_error:+.1f}%)")
-    
-    # ========================================
+            print(f"  Total volume - True: {true_volume_m3:,.0f} m³, "
+                f"Pred: {pred_volume_m3:,.0f} m³")
+            print(f"  Missing: {missing_volume_m3:+,.0f} m³ ({volume_percent_error:+.1f}%)")
+                
+       
     # Create DataFrame and compute totals
-    # ========================================
+
     results_df = pd.DataFrame(flight_results)
     
     # Sort by missing volume (descending - most underpredicted first)
-    results_df = results_df.sort_values('true_volume_m3', ascending=False)
+    results_df = results_df.sort_values('missing_volume_m3', ascending=False)
+    #results_df = results_df.sort_values('true_volume_m3', ascending=False)
     
     # Compute totals
     total_true_volume = results_df['true_volume_m3'].sum()
@@ -1346,9 +1350,9 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
     
     print(f"\nBreakdown:")
     print(f"  Underpredicted flights: {len(underpredicted)} "
-          f"(missing {underpredicted['missing_volume_m3'].sum():,.0f} acre-ft)")
+        f"(missing {underpredicted['missing_volume_m3'].sum():,.0f} m³)")
     print(f"  Overpredicted flights: {len(overpredicted)} "
-          f"(excess {-overpredicted['missing_volume_m3'].sum():,.0f} acre-ft)")
+        f"(excess {-overpredicted['missing_volume_m3'].sum():,.0f} m³)")
     
     # ========================================
     # Save results
@@ -1377,9 +1381,9 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
     ax.grid(axis='x', alpha=0.3)
     
     # Add text box with totals
-    textstr = (f'Total Missing: {total_missing_volume:+,.0f} acre-ft\n'
-               f'({total_missing_percent:+.1f}%)\n'
-               f'Flights: {len(results_df)}')
+    textstr = (f'Total Missing: {total_missing_volume:+,.0f} m³\n'
+            f'({total_missing_percent:+.1f}%)\n'
+            f'Flights: {len(results_df)}')
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.8)
     ax.text(0.98, 0.02, textstr, transform=ax.transAxes, fontsize=11,
             verticalalignment='bottom', horizontalalignment='right', bbox=props)
@@ -1438,16 +1442,16 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
     ax.axis('off')
     
     # Top 10 most underpredicted
-    top_under = results_df.nlargest(10, 'missing_volume_acre_ft')
+    top_under = results_df.nlargest(10, 'missing_volume_m3')
     
     # Top 10 most overpredicted
-    top_over = results_df.nsmallest(10, 'missing_volume_acre_ft')
+    top_over = results_df.nsmallest(10, 'missing_volume_m3')
     
     # Create table
     table_data = []
     table_data.append(['Flight', 'Basin', 'Area (km²)', 'Mean True\nSWE (m)', 
-                      'Mean Pred\nSWE (m)', 'RMSE (m)', 'Missing\nVolume (acre-ft)', 
-                      'Error (%)'])
+                  'Mean Pred\nSWE (m)', 'RMSE (m)', 'Missing\nVolume (m³)', 
+                  'Error (%)'])
     
     # Add underpredicted
     for _, row in top_under.iterrows():
@@ -1458,10 +1462,9 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
             f"{row['mean_true_swe_m']:.2f}",
             f"{row['mean_pred_swe_m']:.2f}",
             f"{row['rmse_m']:.3f}",
-            f"{row['missing_volume_acre_ft']:+,.0f}",
+            f"{row['missing_volume_m3']:+,.0f}",
             f"{row['volume_percent_error']:+.1f}%"
         ])
-    
     # Separator
     table_data.append(['─'*30] * 8)
     
@@ -1474,10 +1477,10 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
             f"{row['mean_true_swe_m']:.2f}",
             f"{row['mean_pred_swe_m']:.2f}",
             f"{row['rmse_m']:.3f}",
-            f"{row['missing_volume_acre_ft']:+,.0f}",
+            f"{row['missing_volume_m3']:+,.0f}",
             f"{row['volume_percent_error']:+.1f}%"
         ])
-    
+
     table = ax.table(cellText=table_data, cellLoc='left', loc='center',
                     colWidths=[0.20, 0.12, 0.08, 0.10, 0.10, 0.08, 0.15, 0.08])
     
@@ -1519,28 +1522,28 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
     basin_summary = results_df.groupby('basin').agg({
         'n_pixels': 'sum',
         'area_km2': 'sum',
-        'true_volume_acre_ft': 'sum',
-        'pred_volume_acre_ft': 'sum',
-        'missing_volume_acre_ft': 'sum',
+        'true_volume_m3': 'sum',
+        'pred_volume_m3': 'sum',
+        'missing_volume_m3': 'sum',
         'mae_m': 'mean',
         'rmse_m': 'mean',
         'r2': 'mean'
     }).reset_index()
-    
+
     basin_summary['volume_percent_error'] = (
-        basin_summary['missing_volume_acre_ft'] / 
-        basin_summary['true_volume_acre_ft'] * 100
+        basin_summary['missing_volume_m3'] / 
+        basin_summary['true_volume_m3'] * 100
     )
-    
+        
     fig, axes = plt.subplots(2, 1, figsize=(12, 10))
     
     # Basin missing volume
     colors_basin = ['red' if x > 0 else 'blue' 
-                    for x in basin_summary['missing_volume_acre_ft']]
-    axes[0].barh(basin_summary['basin'], basin_summary['missing_volume_acre_ft'],
+                    for x in basin_summary['missing_volume_m3']]
+    axes[0].barh(basin_summary['basin'], basin_summary['missing_volume_m3'],
                 color=colors_basin, alpha=0.7, edgecolor='black')
     axes[0].axvline(x=0, color='black', linestyle='--', linewidth=2)
-    axes[0].set_xlabel('Missing SWE (acre-feet)', fontsize=12, fontweight='bold')
+    axes[0].set_xlabel('Missing SWE Volume (m³)', fontsize=12, fontweight='bold')
     axes[0].set_title('Basin-Level Missing SWE Volume', fontsize=14, fontweight='bold')
     axes[0].grid(axis='x', alpha=0.3)
     
@@ -1738,9 +1741,9 @@ def run(folder):
     # Per-flight summary
     print("\nPer-flight SWE totals:")
     print(f"  Total flights analyzed: {len(flight_results)}")
-    print(f"  Total missing SWE: {flight_results['missing_volume_acre_ft'].sum():+,.0f} acre-ft")
+    print(f"  Total missing SWE: {flight_results['missing_volume_m3'].sum():+,.0f} m³")
     print(f"  Mean per-flight RMSE: {flight_results['rmse_m'].mean():.3f} m")
-    
+
     print("\n" + "="*80)
     print("GENERATED FILES:")
     print("  - ablation_results.json")
