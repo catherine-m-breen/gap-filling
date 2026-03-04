@@ -919,7 +919,7 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         
         X = X[None, :, :, :]
         Y = Y[None, :, :, :]
-        Y_mask = Y_mask[None, :, :, :]
+        Y_mask = Y_mask[None, :, :, :].squeeze()
         
         test_x.append(X)
         test_y.append(Y)
@@ -1891,7 +1891,7 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     # Add batch dimension for consistency: (1, C, H, W)
     X = X[None, :, :, :]
     Y = Y[None, :, :, :]
-    Y_mask = Y_mask[None, :, :]
+    Y_mask = Y_mask[None, :, :].squeeze()
 
     # Initialize reconstruction arrays
     reconstruction = np.zeros((H, W), dtype=np.float32)
