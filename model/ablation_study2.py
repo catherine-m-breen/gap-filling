@@ -1451,6 +1451,8 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
             true_m = np.expm1(true_m)
             
             # Apply mask to get valid pixels only
+            import IPython 
+            IPython.embed()
             pred_valid = pred_m[mask]
             true_valid = true_m[mask]
             
