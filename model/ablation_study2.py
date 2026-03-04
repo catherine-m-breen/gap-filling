@@ -949,7 +949,8 @@ def convert_to_patches(test_x, test_y, test_y_mask, filenames_test,
 
     for img_idx, (data, label, mask, filename) in enumerate(zip(test_x, test_y, test_y_mask, filenames_test)):
         _, C, H, W = data.shape
-        
+        import IPython
+        IPython.embed()
         if mask.ndim == 3:
             mask = mask.squeeze()  # Remove extra dimensions
         elif mask.ndim == 4:
