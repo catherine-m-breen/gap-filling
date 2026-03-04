@@ -132,6 +132,225 @@ def evaluate_model(model, test_x, test_y, test_masks, device):
     
     return all_preds, all_labels
 
+
+##############################################
+
+def plot_sample_basin_patches(zarr_dir, sample_flight_id, patch_size=256, stride=128, 
+                              min_valid_fraction=0.3, save_path=None):
+    """
+    Visualize a sample flight showing:
+    1. Full image with patch grid overlay
+    2. Sample of individual patches
+    3. Distribution of valid pixels per patch
+    
+    Args:
+        zarr_dir: Directory containing zarr files
+        sample_flight_id: Flight ID to visualize (e.g., 'ASO_Dolores_2023Apr06_swe_50m')
+        patch_size: Size of patches (default 256)
+        stride: Stride for patch extraction (default 128)
+        min_valid_fraction: Minimum valid pixel fraction to keep patch
+        save_path: Path to save figure (optional)
+    """
+    from matplotlib.patches import Rectangle
+    import matplotlib.patches as mpatches
+    
+    print(f"\nLoading sample flight: {sample_flight_id}")
+    
+    # Load the zarr file
+    zarr_path = Path(zarr_dir) / f"{sample_flight_id}.zarr"
+    if not zarr_path.exists():
+        print(f"ERROR: {zarr_path} not found")
+        return
+    
+    z = zarr.open(str(zarr_path), mode='r')
+    X = np.array(z['X'], dtype=np.float32)
+    Y = np.array(z['Y'], dtype=np.float32)
+    
+    print(f"Loaded data shape: X={X.shape}, Y={Y.shape}")
+    
+    # Get dimensions
+    C, H, W = X.shape
+    
+    # Extract key channels for visualization
+    forest_cover = X[2, :, :]  # Channel 2: Forest cover
+    elevation = X[3, :, :]     # Channel 3: Elevation
+    ndsi = X[8, :, :]          # Channel 8: VIIRS NDSI
+    swe = Y[0, :, :]           # SWE target
+    
+    # Create mask
+    swe_mask = ~np.isnan(swe) & (swe >= 0) & (swe <= 10.0)
+    
+    # Generate patch locations and check validity
+    patch_info = []
+    
+    for row in range(0, H - patch_size + 1, stride):
+        for col in range(0, W - patch_size + 1, stride):
+            mask_patch = swe_mask[row:row+patch_size, col:col+patch_size]
+            valid_fraction = mask_patch.sum() / mask_patch.size
+            
+            patch_info.append({
+                'row': row,
+                'col': col,
+                'valid_fraction': valid_fraction,
+                'is_valid': valid_fraction >= min_valid_fraction
+            })
+    
+    print(f"\nPatch statistics:")
+    print(f"  Patch size: {patch_size}x{patch_size}, Stride: {stride}")
+    print(f"  Total possible patches: {len(patch_info)}")
+    print(f"  Valid patches (>{min_valid_fraction*100:.0f}% valid): "
+          f"{sum(p['is_valid'] for p in patch_info)}")
+    
+    # ========================================
+    # CREATE FIGURE
+    # ========================================
+    fig = plt.figure(figsize=(20, 12))
+    gs = fig.add_gridspec(3, 4, hspace=0.3, wspace=0.3)
+    
+    # ========================================
+    # ROW 1: Full images with patch grid
+    # ========================================
+    
+    # Plot 1: SWE with patch grid
+    ax1 = fig.add_subplot(gs[0, 0])
+    im1 = ax1.imshow(swe, cmap='viridis', vmin=0, vmax=np.nanpercentile(swe, 95))
+    
+    # Overlay patch grid
+    for p in patch_info:
+        color = 'lime' if p['is_valid'] else 'red'
+        alpha = 0.3 if p['is_valid'] else 0.15
+        rect = Rectangle((p['col'], p['row']), patch_size, patch_size,
+                        linewidth=1, edgecolor=color, facecolor='none', alpha=alpha)
+        ax1.add_patch(rect)
+    
+    ax1.set_title(f'SWE (m)\nGreen=Valid patches, Red=Rejected', 
+                  fontsize=12, fontweight='bold')
+    ax1.axis('off')
+    plt.colorbar(im1, ax=ax1, fraction=0.046, pad=0.04)
+    
+    # Plot 2: Forest cover
+    ax2 = fig.add_subplot(gs[0, 1])
+    im2 = ax2.imshow(forest_cover, cmap='Greens', vmin=0, vmax=100)
+    ax2.set_title('Forest Cover (%)', fontsize=12, fontweight='bold')
+    ax2.axis('off')
+    plt.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04)
+    
+    # Plot 3: Elevation
+    ax3 = fig.add_subplot(gs[0, 2])
+    im3 = ax3.imshow(elevation, cmap='terrain')
+    ax3.set_title('Elevation (m)', fontsize=12, fontweight='bold')
+    ax3.axis('off')
+    plt.colorbar(im3, ax=ax3, fraction=0.046, pad=0.04)
+    
+    # Plot 4: NDSI
+    ax4 = fig.add_subplot(gs[0, 3])
+    ndsi_valid = np.where(~np.isnan(ndsi), ndsi, 0)
+    im4 = ax4.imshow(ndsi_valid, cmap='Blues', vmin=0, vmax=1)
+    ax4.set_title('VIIRS NDSI', fontsize=12, fontweight='bold')
+    ax4.axis('off')
+    plt.colorbar(im4, ax=ax4, fraction=0.046, pad=0.04)
+    
+    # ========================================
+    # ROW 2: Sample valid patches
+    # ========================================
+    valid_patches = [p for p in patch_info if p['is_valid']]
+    
+    if len(valid_patches) >= 4:
+        # Select 4 patches: corners and center
+        indices = [
+            0,  # Top-left
+            len(valid_patches) // 3,  # Left-center
+            2 * len(valid_patches) // 3,  # Right-center
+            -1  # Bottom-right
+        ]
+        
+        for i, idx in enumerate(indices):
+            p = valid_patches[idx]
+            row, col = p['row'], p['col']
+            
+            ax = fig.add_subplot(gs[1, i])
+            
+            # Extract patch
+            swe_patch = swe[row:row+patch_size, col:col+patch_size]
+            mask_patch = swe_mask[row:row+patch_size, col:col+patch_size]
+            
+            # Plot with mask overlay
+            im = ax.imshow(swe_patch, cmap='viridis', vmin=0, 
+                          vmax=np.nanpercentile(swe, 95))
+            
+            # Overlay invalid pixels in red
+            invalid_overlay = np.zeros((patch_size, patch_size, 4))
+            invalid_overlay[~mask_patch] = [1, 0, 0, 0.3]  # Red with transparency
+            ax.imshow(invalid_overlay)
+            
+            ax.set_title(f'Patch {i+1}\nValid: {p["valid_fraction"]*100:.1f}%\n'
+                        f'Position: ({row}, {col})',
+                        fontsize=10)
+            ax.axis('off')
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    
+    # ========================================
+    # ROW 3: Statistics
+    # ========================================
+    
+    # Plot 1: Valid fraction histogram
+    ax_hist = fig.add_subplot(gs[2, :2])
+    valid_fractions = [p['valid_fraction'] for p in patch_info]
+    
+    ax_hist.hist(valid_fractions, bins=50, color='steelblue', 
+                alpha=0.7, edgecolor='black')
+    ax_hist.axvline(x=min_valid_fraction, color='red', linestyle='--', 
+                   linewidth=2, label=f'Threshold ({min_valid_fraction*100:.0f}%)')
+    ax_hist.set_xlabel('Valid Pixel Fraction', fontsize=12, fontweight='bold')
+    ax_hist.set_ylabel('Number of Patches', fontsize=12, fontweight='bold')
+    ax_hist.set_title('Distribution of Valid Pixels per Patch', 
+                     fontsize=13, fontweight='bold')
+    ax_hist.legend(fontsize=11)
+    ax_hist.grid(alpha=0.3)
+    
+    # Plot 2: Patch coverage map
+    ax_coverage = fig.add_subplot(gs[2, 2:])
+    
+    # Create coverage map showing number of times each pixel is covered
+    coverage_map = np.zeros((H, W), dtype=int)
+    for p in patch_info:
+        if p['is_valid']:
+            coverage_map[p['row']:p['row']+patch_size, 
+                        p['col']:p['col']+patch_size] += 1
+    
+    im_cov = ax_coverage.imshow(coverage_map, cmap='hot', interpolation='nearest')
+    ax_coverage.set_title('Patch Coverage Map\n(Times each pixel is included)', 
+                         fontsize=13, fontweight='bold')
+    ax_coverage.axis('off')
+    cbar = plt.colorbar(im_cov, ax=ax_coverage, fraction=0.046, pad=0.04)
+    cbar.set_label('Coverage count', fontsize=11)
+    
+    # ========================================
+    # Add overall title with metadata
+    # ========================================
+    basin = flight_to_basin.get(f"{sample_flight_id}.tif", "Unknown")
+    fig.suptitle(f'Sample Flight Patch Visualization\n'
+                f'{sample_flight_id} ({basin})\n'
+                f'Image: {H}x{W} | Patches: {sum(p["is_valid"] for p in patch_info)}/{len(patch_info)} valid',
+                fontsize=16, fontweight='bold', y=0.98)
+    
+    # ========================================
+    # Save or show
+    # ========================================
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"\nSaved figure to: {save_path}")
+    else:
+        plt.show()
+    
+    plt.close()
+    
+    return patch_info
+#############################################
+
+
+
+
 #############
 ################### ABLATION STUDY ######################
 #############
@@ -946,6 +1165,7 @@ def analyze_importance_by_forest_cover(model, test_x, test_y, test_masks,
         for feature_name in features_to_test.keys():
             ablated_preds_bin = ablated_predictions[feature_name][mask]
             ablated_errors_bin = np.abs(ablated_preds_bin - labels_bin)
+            #ablated_errors_bin = (ablated_preds_bin - labels_bin) ** 2  # Squared errors
             
             # Importance = increase in MAE when feature is removed
             importance = ablated_errors_bin.mean() - baseline_errors_bin.mean()
@@ -1584,6 +1804,382 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
 
 
 
+def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id, 
+                                norm_mean, norm_std, y_mean, y_std,
+                                patch_size=256, stride=128, min_valid_fraction=0.3,
+                                device='cuda', save_path=None):
+    """
+    Reconstruct a full flight prediction from patches and plot side-by-side with actual.
+    
+    Args:
+        model: Trained model
+        zarr_dir: Directory containing zarr files
+        sample_flight_id: Flight ID to visualize
+        norm_mean, norm_std: Normalization parameters for X
+        y_mean, y_std: Normalization parameters for Y
+        patch_size: Size of patches
+        stride: Stride for patch extraction
+        min_valid_fraction: Minimum valid pixel fraction
+        device: torch device
+        save_path: Path to save figure
+    """
+    from matplotlib.patches import Rectangle
+    import matplotlib.patches as mpatches
+    
+    print(f"\nReconstructing flight: {sample_flight_id}")
+    
+    # Load the zarr file
+    zarr_path = Path(zarr_dir) / f"{sample_flight_id}.zarr"
+    if not zarr_path.exists():
+        print(f"ERROR: {zarr_path} not found")
+        return
+    
+    z = zarr.open(str(zarr_path), mode='r')
+    X = np.array(z['X'], dtype=np.float32)
+    Y = np.array(z['Y'], dtype=np.float32)
+    
+    print(f"Loaded data shape: X={X.shape}, Y={Y.shape}")
+    
+    # Process channels (same as training)
+    viirs_raw = X[8, :, :]
+    viirs_mask = (~np.isnan(viirs_raw)).astype(np.float32)
+    viirs_filled = np.nan_to_num(viirs_raw, nan=0.0)
+    
+    channels_except_viirs = [2, 3, 4, 5, 6, 7]
+    all_but_viirs = X[channels_except_viirs, :, :]
+    all_but_viirs[all_but_viirs == -9999] = 0
+    all_but_viirs_filled = np.nan_to_num(all_but_viirs, nan=0.0)
+    
+    X_processed = np.concatenate([
+        all_but_viirs_filled,
+        viirs_filled[np.newaxis, :, :],
+        viirs_mask[np.newaxis, :, :]
+    ], axis=0)
+    
+    # Get dimensions
+    C, H, W = X_processed.shape
+    
+    # Create mask for Y
+    Y[Y < 0] = np.nan
+    Y[Y > 10.0] = np.nan
+    Y_mask = ~np.isnan(Y[0])
+    
+    # Initialize reconstruction arrays
+    # We'll accumulate predictions and weights for averaging overlapping regions
+    reconstruction = np.zeros((H, W), dtype=np.float32)
+    weight_map = np.zeros((H, W), dtype=np.float32)
+    
+    # Store patch info for visualization
+    valid_patch_locations = []
+    
+    print("\nProcessing patches...")
+    model.eval()
+    
+    patch_count = 0
+    valid_patch_count = 0
+    
+    with torch.no_grad():
+        for row in tqdm(range(0, H - patch_size + 1, stride), desc="Rows"):
+            for col in range(0, W - patch_size + 1, stride):
+                patch_count += 1
+                
+                # Extract patch
+                x_patch = X_processed[:, row:row+patch_size, col:col+patch_size]
+                y_patch = Y[0, row:row+patch_size, col:col+patch_size]
+                mask_patch = Y_mask[row:row+patch_size, col:col+patch_size]
+                
+                # Check validity
+                valid_fraction = mask_patch.sum() / mask_patch.size
+                
+                if valid_fraction < min_valid_fraction:
+                    continue
+                
+                valid_patch_count += 1
+                valid_patch_locations.append((row, col))
+                
+                # Prepare patch for model
+                # Log transform
+                y_patch_log = np.log1p(y_patch)
+                
+                # Normalize X
+                x_patch_norm = (x_patch - norm_mean[:, :, 0, 0][:, np.newaxis, np.newaxis]) / \
+                              (norm_std[:, :, 0, 0][:, np.newaxis, np.newaxis] + 1e-7)
+                
+                # Normalize Y
+                y_patch_norm = (y_patch_log - y_mean) / (y_std + 1e-7)
+                
+                # Add batch dimension
+                x_tensor = torch.from_numpy(x_patch_norm[np.newaxis, :, :, :]).to(device, dtype=torch.float32)
+                
+                # Predict
+                output = model(x_tensor)
+                pred_patch_norm = output.cpu().numpy()[0]  # Remove batch dim
+                
+                # Denormalize prediction
+                pred_patch_log = pred_patch_norm * y_std + y_mean
+                pred_patch = np.expm1(pred_patch_log)
+                
+                # Add to reconstruction with weights
+                # Use Gaussian weights to reduce edge artifacts
+                weights = np.ones((patch_size, patch_size), dtype=np.float32)
+                
+                # Optional: Apply Gaussian weighting to reduce edge effects
+                # Center pixels get higher weight
+                center = patch_size // 2
+                y_grid, x_grid = np.ogrid[:patch_size, :patch_size]
+                dist_from_center = np.sqrt((x_grid - center)**2 + (y_grid - center)**2)
+                weights = np.exp(-(dist_from_center**2) / (2 * (patch_size/4)**2))
+                
+                # Accumulate weighted predictions
+                reconstruction[row:row+patch_size, col:col+patch_size] += pred_patch * weights
+                weight_map[row:row+patch_size, col:col+patch_size] += weights
+    
+    print(f"\nProcessed {valid_patch_count}/{patch_count} valid patches")
+    
+    # Normalize by weights (average overlapping predictions)
+    reconstruction = np.divide(reconstruction, weight_map, 
+                              out=np.zeros_like(reconstruction), 
+                              where=weight_map > 0)
+    
+    # Apply original mask (only show predictions where we have ground truth)
+    reconstruction[~Y_mask] = np.nan
+    
+    # Get actual SWE
+    actual_swe = Y[0]
+    
+    # Compute error map
+    error_map = reconstruction - actual_swe
+    abs_error_map = np.abs(error_map)
+    
+    # Compute metrics
+    valid_mask = Y_mask
+    pred_valid = reconstruction[valid_mask]
+    actual_valid = actual_swe[valid_mask]
+    
+    mae = np.mean(np.abs(pred_valid - actual_valid))
+    rmse = np.sqrt(np.mean((pred_valid - actual_valid)**2))
+    r2 = r2_score(actual_valid, pred_valid)
+    bias = np.mean(pred_valid - actual_valid)
+    
+    print(f"\nReconstruction Metrics:")
+    print(f"  MAE:  {mae:.4f} m")
+    print(f"  RMSE: {rmse:.4f} m")
+    print(f"  R²:   {r2:.4f}")
+    print(f"  Bias: {bias:+.4f} m")
+    
+    # ========================================
+    # CREATE VISUALIZATION
+    # ========================================
+    fig = plt.figure(figsize=(24, 16))
+    gs = fig.add_gridspec(3, 3, hspace=0.25, wspace=0.25)
+    
+    # Determine common color scale for SWE
+    vmin_swe = 0
+    vmax_swe = np.nanpercentile(actual_swe, 98)
+    
+    # ========================================
+    # ROW 1: Main comparison
+    # ========================================
+    
+    # Plot 1: Actual SWE
+    ax1 = fig.add_subplot(gs[0, 0])
+    im1 = ax1.imshow(actual_swe, cmap='viridis', vmin=vmin_swe, vmax=vmax_swe)
+    ax1.set_title('Actual SWE (m)', fontsize=14, fontweight='bold')
+    ax1.axis('off')
+    cbar1 = plt.colorbar(im1, ax=ax1, fraction=0.046, pad=0.04)
+    cbar1.ax.tick_params(labelsize=10)
+    
+    # Plot 2: Predicted SWE
+    ax2 = fig.add_subplot(gs[0, 1])
+    im2 = ax2.imshow(reconstruction, cmap='viridis', vmin=vmin_swe, vmax=vmax_swe)
+    ax2.set_title('Predicted SWE (m)', fontsize=14, fontweight='bold')
+    ax2.axis('off')
+    cbar2 = plt.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04)
+    cbar2.ax.tick_params(labelsize=10)
+    
+    # Plot 3: Error map (prediction - actual)
+    ax3 = fig.add_subplot(gs[0, 2])
+    error_limit = np.nanpercentile(np.abs(error_map), 95)
+    im3 = ax3.imshow(error_map, cmap='RdBu_r', vmin=-error_limit, vmax=error_limit)
+    ax3.set_title('Error: Pred - Actual (m)\n(Red=Over, Blue=Under)', 
+                  fontsize=14, fontweight='bold')
+    ax3.axis('off')
+    cbar3 = plt.colorbar(im3, ax=ax3, fraction=0.046, pad=0.04)
+    cbar3.ax.tick_params(labelsize=10)
+    
+    # ========================================
+    # ROW 2: Additional context
+    # ========================================
+    
+    # Plot 4: Absolute error
+    ax4 = fig.add_subplot(gs[1, 0])
+    im4 = ax4.imshow(abs_error_map, cmap='hot_r', vmin=0, vmax=error_limit)
+    ax4.set_title('Absolute Error (m)', fontsize=14, fontweight='bold')
+    ax4.axis('off')
+    cbar4 = plt.colorbar(im4, ax=ax4, fraction=0.046, pad=0.04)
+    cbar4.ax.tick_params(labelsize=10)
+    
+    # Plot 5: Coverage map (how many patches covered each pixel)
+    ax5 = fig.add_subplot(gs[1, 1])
+    coverage_map = (weight_map > 0).astype(float)
+    coverage_map[~Y_mask] = np.nan
+    im5 = ax5.imshow(coverage_map, cmap='Greys', vmin=0, vmax=1)
+    ax5.set_title('Prediction Coverage\n(1=Predicted, 0=No coverage)', 
+                  fontsize=14, fontweight='bold')
+    ax5.axis('off')
+    cbar5 = plt.colorbar(im5, ax=ax5, fraction=0.046, pad=0.04)
+    cbar5.ax.tick_params(labelsize=10)
+    
+    # Plot 6: Patch weight map (shows overlap intensity)
+    ax6 = fig.add_subplot(gs[1, 2])
+    im6 = ax6.imshow(weight_map, cmap='plasma')
+    
+    # Overlay patch boundaries
+    for row, col in valid_patch_locations[::10]:  # Show every 10th patch to avoid clutter
+        rect = Rectangle((col, row), patch_size, patch_size,
+                        linewidth=0.5, edgecolor='white', facecolor='none', alpha=0.3)
+        ax6.add_patch(rect)
+    
+    ax6.set_title(f'Weight Map & Patch Grid\n({len(valid_patch_locations)} patches)', 
+                  fontsize=14, fontweight='bold')
+    ax6.axis('off')
+    cbar6 = plt.colorbar(im6, ax=ax6, fraction=0.046, pad=0.04)
+    cbar6.ax.tick_params(labelsize=10)
+    
+    # ========================================
+    # ROW 3: Statistics and scatter
+    # ========================================
+    
+    # Plot 7: Scatter plot
+    ax7 = fig.add_subplot(gs[2, 0])
+    
+    # Subsample for plotting if too many points
+    n_points = len(actual_valid)
+    if n_points > 50000:
+        indices = np.random.choice(n_points, 50000, replace=False)
+        plot_actual = actual_valid[indices]
+        plot_pred = pred_valid[indices]
+    else:
+        plot_actual = actual_valid
+        plot_pred = pred_valid
+    
+    # Density scatter
+    h = ax7.hexbin(plot_actual, plot_pred, gridsize=50, cmap='viridis', 
+                   mincnt=1, linewidths=0.2, edgecolors='face')
+    
+    # 1:1 line
+    max_val = max(plot_actual.max(), plot_pred.max())
+    ax7.plot([0, max_val], [0, max_val], 'r--', linewidth=2, label='1:1 Line')
+    
+    ax7.set_xlabel('Actual SWE (m)', fontsize=12, fontweight='bold')
+    ax7.set_ylabel('Predicted SWE (m)', fontsize=12, fontweight='bold')
+    ax7.set_title('Pixel-Level Comparison', fontsize=14, fontweight='bold')
+    ax7.legend(fontsize=10)
+    ax7.grid(alpha=0.3)
+    ax7.set_aspect('equal', adjustable='box')
+    
+    # Add metrics text
+    textstr = f'R² = {r2:.3f}\nRMSE = {rmse:.3f} m\nMAE = {mae:.3f} m\nBias = {bias:+.3f} m'
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.8)
+    ax7.text(0.05, 0.95, textstr, transform=ax7.transAxes, fontsize=11,
+            verticalalignment='top', bbox=props)
+    
+    plt.colorbar(h, ax=ax7, label='Point density')
+    
+    # Plot 8: Error histogram
+    ax8 = fig.add_subplot(gs[2, 1])
+    
+    errors_valid = error_map[valid_mask]
+    ax8.hist(errors_valid, bins=100, color='steelblue', alpha=0.7, edgecolor='black')
+    ax8.axvline(x=0, color='red', linestyle='--', linewidth=2, label='Zero error')
+    ax8.axvline(x=np.median(errors_valid), color='orange', linestyle='--', 
+               linewidth=2, label=f'Median = {np.median(errors_valid):.3f} m')
+    ax8.set_xlabel('Error (m)', fontsize=12, fontweight='bold')
+    ax8.set_ylabel('Pixel Count', fontsize=12, fontweight='bold')
+    ax8.set_title('Error Distribution', fontsize=14, fontweight='bold')
+    ax8.legend(fontsize=10)
+    ax8.grid(alpha=0.3, axis='y')
+    
+    # Plot 9: Statistics table
+    ax9 = fig.add_subplot(gs[2, 2])
+    ax9.axis('off')
+    
+    # Compute additional statistics
+    stats_data = [
+        ['Metric', 'Value'],
+        ['─'*20, '─'*20],
+        ['Total Pixels', f'{n_points:,}'],
+        ['Valid Area', f'{n_points * 2500 / 1e6:.2f} km²'],
+        ['', ''],
+        ['MAE', f'{mae:.4f} m'],
+        ['RMSE', f'{rmse:.4f} m'],
+        ['R²', f'{r2:.4f}'],
+        ['Bias', f'{bias:+.4f} m'],
+        ['', ''],
+        ['Mean Actual', f'{actual_valid.mean():.4f} m'],
+        ['Mean Predicted', f'{pred_valid.mean():.4f} m'],
+        ['', ''],
+        ['Max Error', f'{np.abs(errors_valid).max():.4f} m'],
+        ['Median Error', f'{np.median(np.abs(errors_valid)):.4f} m'],
+        ['', ''],
+        ['Patches Used', f'{len(valid_patch_locations)}'],
+        ['Patch Size', f'{patch_size}x{patch_size}'],
+        ['Stride', f'{stride}'],
+    ]
+    
+    table = ax9.table(cellText=stats_data, cellLoc='left', loc='center',
+                     colWidths=[0.6, 0.4])
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1, 2)
+    
+    # Style header
+    for i in range(2):
+        cell = table[(0, i)]
+        cell.set_facecolor('#4472C4')
+        cell.set_text_props(weight='bold', color='white')
+    
+    # Color code metric rows
+    for i in range(5, 9):  # Metric rows
+        for j in range(2):
+            table[(i, j)].set_facecolor('#E6F0FF')
+    
+    ax9.set_title('Reconstruction Statistics', fontsize=14, fontweight='bold', pad=20)
+    
+    # ========================================
+    # Overall title
+    # ========================================
+    basin = flight_to_basin.get(f"{sample_flight_id}.tif", "Unknown")
+    fig.suptitle(f'Flight Reconstruction: {sample_flight_id}\n'
+                f'Basin: {basin} | Resolution: {H}x{W} pixels',
+                fontsize=18, fontweight='bold', y=0.995)
+    
+    # ========================================
+    # Save
+    # ========================================
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"\nSaved reconstruction to: {save_path}")
+    else:
+        plt.show()
+    
+    plt.close()
+    
+    # Return results
+    return {
+        'reconstruction': reconstruction,
+        'actual': actual_swe,
+        'error': error_map,
+        'mask': Y_mask,
+        'metrics': {
+            'mae': mae,
+            'rmse': rmse,
+            'r2': r2,
+            'bias': bias
+        },
+        'n_patches': len(valid_patch_locations)
+    }
+
 # ============================================================
 # Update main() to call this function
 # ============================================================
@@ -1726,7 +2322,84 @@ def run(folder):
         y_mean, y_std, device, save_dir, norm_mean, norm_std, ## add in this forest cover denorm
         n_bins=20  # Adjust number of bins as needed
     )
+
+    print("\n" + "="*80)
+    print("CREATING SAMPLE PATCH VISUALIZATION")
+    print("="*80)
     
+    # Pick a sample flight (you can change this)
+    sample_flight = 'ASO_Dolores_2023Apr06_swe_50m'  # Modify as needed
+    
+    # Or pick the first test flight automatically
+    if len(filenames_test) > 0:
+        sample_flight = filenames_test[0].replace('.tif', '')
+    
+    plot_sample_basin_patches(
+        zarr_dir=zarr_dir,
+        sample_flight_id=sample_flight,
+        patch_size=patch_size,
+        stride=stride,
+        min_valid_fraction=min_valid_fraction,
+        save_path=os.path.join(save_dir, f'sample_patches_{sample_flight}.png')
+    )
+    
+    # ========================================
+    # STEP 7.5: Reconstruct and visualize sample flights
+    # ========================================
+    print("\n" + "="*80)
+    print("RECONSTRUCTING SAMPLE FLIGHTS FROM PATCHES")
+    print("="*80)
+    
+    # Visualize first 3 test flights (or specify particular ones)
+    flights_to_visualize = filenames_test[:3]  # Modify as needed
+    
+    # Or specify particular flights:
+    # flights_to_visualize = [
+    #     'ASO_Dolores_2023Apr06_swe_50m.tif',
+    #     'ASO_Conejos_2023May05_swe_50m.tif'
+    # ]
+    
+    reconstruction_results = []
+    
+    for flight_file in flights_to_visualize:
+        flight_id = flight_file.replace('.tif', '')
+        print(f"\n{'='*80}")
+        print(f"Processing: {flight_id}")
+        print('='*80)
+        
+        result = reconstruct_and_plot_flight(
+            model=model,
+            zarr_dir=zarr_dir,
+            sample_flight_id=flight_id,
+            norm_mean=norm_mean,
+            norm_std=norm_std,
+            y_mean=y_mean,
+            y_std=y_std,
+            patch_size=patch_size,
+            stride=stride,
+            min_valid_fraction=min_valid_fraction,
+            device=device,
+            save_path=os.path.join(save_dir, f'reconstruction_{flight_id}.png')
+        )
+        
+        reconstruction_results.append({
+            'flight': flight_id,
+            'metrics': result['metrics'],
+            'n_patches': result['n_patches']
+        })
+    
+    # Print summary
+    print("\n" + "="*80)
+    print("RECONSTRUCTION SUMMARY")
+    print("="*80)
+    for res in reconstruction_results:
+        print(f"\n{res['flight']}:")
+        print(f"  Patches: {res['n_patches']}")
+        print(f"  MAE:  {res['metrics']['mae']:.4f} m")
+        print(f"  RMSE: {res['metrics']['rmse']:.4f} m")
+        print(f"  R²:   {res['metrics']['r2']:.4f}")
+        print(f"  Bias: {res['metrics']['bias']:+.4f} m")
+
     # ========================================
     # FINAL SUMMARY
     # ========================================
