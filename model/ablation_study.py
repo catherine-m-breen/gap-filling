@@ -1801,27 +1801,12 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
     print("="*80)
     
     return results_df, basin_summary
-
-
-
 def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id, 
                                 norm_mean, norm_std, y_mean, y_std,
                                 patch_size=256, stride=128, min_valid_fraction=0.3,
                                 device='cuda', save_path=None):
     """
     Reconstruct a full flight prediction from patches and plot side-by-side with actual.
-    
-    Args:
-        model: Trained model
-        zarr_dir: Directory containing zarr files
-        sample_flight_id: Flight ID to visualize
-        norm_mean, norm_std: Normalization parameters for X
-        y_mean, y_std: Normalization parameters for Y
-        patch_size: Size of patches
-        stride: Stride for patch extraction
-        min_valid_fraction: Minimum valid pixel fraction
-        device: torch device
-        save_path: Path to save figure
     """
     from matplotlib.patches import Rectangle
     import matplotlib.patches as mpatches
@@ -1859,13 +1844,36 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     # Get dimensions
     C, H, W = X_processed.shape
     
+    print(f"Processed X shape: {X_processed.shape}")
+    print(f"Norm mean shape: {norm_mean.shape}")
+    print(f"Norm std shape: {norm_std.shape}")
+    
+    # ========================================
+    # FIX: Extract normalization parameters correctly
+    # ========================================
+    # norm_mean and norm_std have shape (1, C, 1, 1)
+    # We need shape (C, 1, 1) for broadcasting with (C, H, W)
+    
+    if norm_mean.shape == (1, C, 1, 1):
+        # Squeeze out the batch dimension
+        norm_mean_2d = norm_mean[0, :, 0, 0]  # Shape: (C,)
+        norm_std_2d = norm_std[0, :, 0, 0]    # Shape: (C,)
+        
+        # Reshape for broadcasting with (C, H, W)
+        norm_mean_2d = norm_mean_2d[:, np.newaxis, np.newaxis]  # Shape: (C, 1, 1)
+        norm_std_2d = norm_std_2d[:, np.newaxis, np.newaxis]    # Shape: (C, 1, 1)
+    else:
+        raise ValueError(f"Unexpected norm_mean shape: {norm_mean.shape}")
+    
+    print(f"Reshaped norm_mean: {norm_mean_2d.shape}")
+    print(f"Reshaped norm_std: {norm_std_2d.shape}")
+    
     # Create mask for Y
     Y[Y < 0] = np.nan
     Y[Y > 10.0] = np.nan
     Y_mask = ~np.isnan(Y[0])
     
     # Initialize reconstruction arrays
-    # We'll accumulate predictions and weights for averaging overlapping regions
     reconstruction = np.zeros((H, W), dtype=np.float32)
     weight_map = np.zeros((H, W), dtype=np.float32)
     
@@ -1901,9 +1909,17 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
                 # Log transform
                 y_patch_log = np.log1p(y_patch)
                 
-                # Normalize X
-                x_patch_norm = (x_patch - norm_mean[:, :, 0, 0][:, np.newaxis, np.newaxis]) / \
-                              (norm_std[:, :, 0, 0][:, np.newaxis, np.newaxis] + 1e-7)
+                # ========================================
+                # FIX: Normalize X using corrected shapes
+                # ========================================
+                # x_patch: (C, H, W) = (8, 256, 256)
+                # norm_mean_2d: (C, 1, 1) = (8, 1, 1)
+                # This will broadcast correctly!
+                x_patch_norm = (x_patch - norm_mean_2d) / (norm_std_2d + 1e-7)
+                
+                # Verify shape
+                assert x_patch_norm.shape == x_patch.shape, \
+                    f"Normalization changed shape: {x_patch.shape} -> {x_patch_norm.shape}"
                 
                 # Normalize Y
                 y_patch_norm = (y_patch_log - y_mean) / (y_std + 1e-7)
@@ -1921,10 +1937,6 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
                 
                 # Add to reconstruction with weights
                 # Use Gaussian weights to reduce edge artifacts
-                weights = np.ones((patch_size, patch_size), dtype=np.float32)
-                
-                # Optional: Apply Gaussian weighting to reduce edge effects
-                # Center pixels get higher weight
                 center = patch_size // 2
                 y_grid, x_grid = np.ogrid[:patch_size, :patch_size]
                 dist_from_center = np.sqrt((x_grid - center)**2 + (y_grid - center)**2)
@@ -1943,6 +1955,7 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     
     # Apply original mask (only show predictions where we have ground truth)
     reconstruction[~Y_mask] = np.nan
+    
     
     # Get actual SWE
     actual_swe = Y[0]
