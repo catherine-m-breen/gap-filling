@@ -941,7 +941,16 @@ def convert_to_patches(test_x, test_y, test_y_mask, filenames_test,
     patched_labels = []
     patched_masks = []
     total_patches = 0
+
+            
+    # Ensure mask is 2D (H, W)
+    ## basically add some dummy dimensions 
+    if mask.ndim == 3:
+        mask = mask.squeeze()  # Remove extra dimensions
+    elif mask.ndim == 4:
+        mask = mask[0, 0, :, :]  # Extract (H, W) from (1, 1, H, W)
     
+
     for img_idx, (data, label, mask, filename) in enumerate(zip(test_x, test_y, test_y_mask, filenames_test)):
         _, C, H, W = data.shape
         
