@@ -234,11 +234,11 @@ def permutation_importance(model, test_x, test_y, test_masks, channel_indices,
 FEATURE_GROUPS = {
     'Forest Cover': [0],
     'Elevation': [1],
-    'Microwave (all)': [2, 3, 4, 5],
-    'Microwave Ch1': [2],
-    'Microwave Ch2': [3],
-    'Microwave Ch3': [4],
-    'Microwave Ch4': [5],
+    'PM (all)': [2, 3, 4, 5],
+    'Tb 37H': [2],
+    'Tb 37V': [3],
+    'Tb 19H': [4],
+    'Tb 19V': [5],
     'VIIRS NDSI': [6],
     'VIIRS Mask': [7],
     'VIIRS (both)': [6, 7],
@@ -441,7 +441,7 @@ def plot_feature_importance(ablation_results, permutation_results, baseline_metr
     # ========================================
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
     
-    microwave_features = ['Microwave Ch1', 'Microwave Ch2', 'Microwave Ch3', 'Microwave Ch4']
+    microwave_features = ['Tb 37H', 'Tb 37V', 'Tb 19H', 'Tb 19V']
     mw_features = [f for f in microwave_features if f in ablation_results]
     
     # Ablation
@@ -451,7 +451,7 @@ def plot_feature_importance(ablation_results, permutation_results, baseline_metr
     axes[0].set_xticks(range(len(mw_features)))
     axes[0].set_xticklabels([f.replace('Microwave ', '') for f in mw_features], fontsize=11)
     axes[0].set_ylabel('RMSE Increase (m)', fontsize=12, fontweight='bold')
-    axes[0].set_title('Microwave Channel Importance\n(Ablation)', fontsize=14, fontweight='bold')
+    axes[0].set_title('PM Channel Importance\n(Ablation)', fontsize=14, fontweight='bold')
     axes[0].axhline(y=0, color='red', linestyle='--', linewidth=2)
     axes[0].grid(axis='y', alpha=0.3)
     
@@ -461,9 +461,9 @@ def plot_feature_importance(ablation_results, permutation_results, baseline_metr
     axes[1].bar(range(len(mw_features)), mw_perm_means, yerr=mw_perm_stds,
                 color='lightcoral', alpha=0.8, edgecolor='black', width=0.6, capsize=5)
     axes[1].set_xticks(range(len(mw_features)))
-    axes[1].set_xticklabels([f.replace('Microwave ', '') for f in mw_features], fontsize=11)
+    axes[1].set_xticklabels([f.replace('PM ', '') for f in mw_features], fontsize=11)
     axes[1].set_ylabel('RMSE Increase (m)', fontsize=12, fontweight='bold')
-    axes[1].set_title('Microwave Channel Importance\n(Permutation)', fontsize=14, fontweight='bold')
+    axes[1].set_title('PM Importance\n(Permutation)', fontsize=14, fontweight='bold')
     axes[1].axhline(y=0, color='red', linestyle='--', linewidth=2)
     axes[1].grid(axis='y', alpha=0.3)
     
@@ -777,10 +777,10 @@ def analyze_importance_by_forest_cover(model, test_x, test_y, test_masks,
     
     # Define features to analyze
     features_to_test = {
-        'Microwave Ch1': [2],
-        'Microwave Ch2': [3],
-        'Microwave Ch3': [4],
-        'Microwave Ch4': [5],
+        'Tb 37H': [2],
+        'Tb 37V': [3],
+        'Tb 19H': [4],
+        'Tb 19V': [5],
         'VIIRS NDSI': [6]
     }
     
@@ -907,7 +907,10 @@ def analyze_importance_by_forest_cover(model, test_x, test_y, test_masks,
     # Denormalize to original scale
     all_forest_cover_denorm = all_forest_cover * forest_cover_std + forest_cover_mean
     all_forest_cover = all_forest_cover_denorm
-    forest_cover_bins = np.linspace(all_forest_cover.min(), all_forest_cover.max(), n_bins + 1)
+    #forest_cover_bins = np.linspace(all_forest_cover.min(), all_forest_cover.max(), n_bins + 1)
+    
+    forest_cover_bins = np.array([0, 20, 40, 60, 80, 100])
+    n_bins = len(forest_cover_bins) - 1  # 5 bins
     bin_centers = (forest_cover_bins[:-1] + forest_cover_bins[1:]) / 2
     
     # Alternative: use percentile-based bins for equal samples
@@ -963,26 +966,26 @@ def analyze_importance_by_forest_cover(model, test_x, test_y, test_masks,
     
     # Define colors for each feature
     colors = {
-        'Microwave Ch1': '#1f77b4',  # Blue
-        'Microwave Ch2': '#ff7f0e',  # Orange
-        'Microwave Ch3': '#2ca02c',  # Green
-        'Microwave Ch4': '#d62728',  # Red
+        'Tb 37H': '#1f77b4',  # Blue
+        'Tb 37V': '#ff7f0e',  # Orange
+        'Tb 19H': '#2ca02c',  # Green
+        'Tb 19V': '#d62728',  # Red
         'VIIRS NDSI': '#9467bd'      # Purple
     }
     
     linestyles = {
-        'Microwave Ch1': '-',
-        'Microwave Ch2': '-',
-        'Microwave Ch3': '-',
-        'Microwave Ch4': '-',
+        'Tb 37H': '-',
+        'Tb 37V': '-',
+        'Tb 19H': '-',
+        'Tb 37V': '-',
         'VIIRS NDSI': '--'
     }
     
     markers = {
-        'Microwave Ch1': 'o',
-        'Microwave Ch2': 's',
-        'Microwave Ch3': '^',
-        'Microwave Ch4': 'D',
+        'Tb 37H': 'o',
+        'Tb 37V': 's',
+        'Tb 19H': '^',
+        'Tb 19V': 'D',
         'VIIRS NDSI': '*'
     }
     
@@ -1002,14 +1005,15 @@ def analyze_importance_by_forest_cover(model, test_x, test_y, test_masks,
                 alpha=0.8)
     
     ax1.axhline(y=0, color='black', linestyle='--', linewidth=1.5, alpha=0.5)
-    ax1.set_xlabel('Forest Cover Fraction (normalized)', fontsize=13, fontweight='bold')
+    ax1.set_xlabel('Forest Cover Fraction', fontsize=13, fontweight='bold')
     ax1.set_ylabel('Feature Importance\n(MAE Increase when removed, m)', 
                    fontsize=13, fontweight='bold')
     ax1.set_title('Feature Importance vs Forest Cover Fraction', 
                   fontsize=15, fontweight='bold')
     ax1.legend(fontsize=11, loc='best', framealpha=0.9)
     ax1.grid(True, alpha=0.3, linestyle='--')
-    ax1.set_xlim(left=bin_forest_cover_means[0], right=bin_forest_cover_means[-1])
+    ax1.set_xlim(left=bin_forest_cover_means[0], right=100) #right=bin_forest_cover_means[-1])
+    ax1.tick_params(axis='both', labelsize=16)  # Add this to increase tick label size
     
     # Plot 2: Relative importance (normalized to sum to 1 in each bin)
     ax2 = axes[1]
@@ -1046,13 +1050,13 @@ def analyze_importance_by_forest_cover(model, test_x, test_y, test_masks,
                 linewidth=2.5,
                 alpha=0.8)
     
-    ax2.set_xlabel('Forest Cover Fraction (normalized)', fontsize=13, fontweight='bold')
+    ax2.set_xlabel('Forest Cover Fraction', fontsize=13, fontweight='bold')
     ax2.set_ylabel('Relative Importance (%)', fontsize=13, fontweight='bold')
     ax2.set_title('Relative Feature Importance vs Forest Cover Fraction', 
                   fontsize=15, fontweight='bold')
     ax2.legend(fontsize=11, loc='best', framealpha=0.9)
     ax2.grid(True, alpha=0.3, linestyle='--')
-    ax2.set_xlim(left=bin_forest_cover_means[0], right=bin_forest_cover_means[-1])
+    ax2.set_xlim(left=bin_forest_cover_means[0], right=100) # right=bin_forest_cover_means[-1])
     ax2.set_ylim(0, 100)
     
     plt.tight_layout()
@@ -1543,15 +1547,23 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
                 color=colors_basin, alpha=0.7, edgecolor='black')
     axes[0].axvline(x=0, color='black', linestyle='--', linewidth=2)
     axes[0].set_xlabel('Missing SWE Volume (m³)', fontsize=12, fontweight='bold')
-    axes[0].set_title('Basin-Level Missing SWE Volume', fontsize=14, fontweight='bold')
+    axes[0].tick_params(axis='both', labelsize=16)  # Add this to increase tick label size
     axes[0].grid(axis='x', alpha=0.3)
     
-    # Basin RMSE
-    axes[1].barh(basin_summary['basin'], basin_summary['rmse_m'],
-                color='steelblue', alpha=0.7, edgecolor='black')
-    axes[1].set_xlabel('RMSE (m)', fontsize=12, fontweight='bold')
-    axes[1].set_title('Basin-Level Prediction Error', fontsize=14, fontweight='bold')
+    # Basin missing volume as percent 
+
+    axes[1].barh(basin_summary['basin'], basin_summary['missing_volume_m3']/ basin_summary['true_volume_m3'] * 100 ,
+                color=colors_basin, alpha=0.7, edgecolor='black')
+    axes[1].axvline(x=0, color='black', linestyle='--', linewidth=2)
+    axes[1].set_xlabel('Missing SWE Volume (%)', fontsize=12, fontweight='bold')
+    axes[1].tick_params(axis='both', labelsize=16)  # Add this to increase tick label size
     axes[1].grid(axis='x', alpha=0.3)
+    # Basin RMSE
+    # axes[1].barh(basin_summary['basin'], basin_summary['rmse_m'],
+    #             color='steelblue', alpha=0.7, edgecolor='black')
+    # axes[1].set_xlabel('RMSE (m)', fontsize=12, fontweight='bold')
+    # axes[1].set_title('Basin-Level Prediction Error', fontsize=14, fontweight='bold')
+    # axes[1].grid(axis='x', alpha=0.3)
     
     plt.tight_layout()
     plt.savefig(os.path.join(save_dir, 'basin_summary.png'), 
