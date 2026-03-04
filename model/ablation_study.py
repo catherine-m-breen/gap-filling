@@ -977,7 +977,7 @@ def analyze_importance_by_forest_cover(model, test_x, test_y, test_masks,
         'Tb 37H': '-',
         'Tb 37V': '-',
         'Tb 19H': '-',
-        'Tb 37V': '-',
+        'Tb 19V': '-',
         'VIIRS NDSI': '--'
     }
     
