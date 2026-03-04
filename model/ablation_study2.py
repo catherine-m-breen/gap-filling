@@ -21,7 +21,7 @@ Exp 1:
 python ablation_study.py --folder "exp1_elevPM_NDSI_CC_1e-6_ps256_W2_smoothL1loss_full"
 
 Exp 2:
-python ablation_study.py --folder "exp2_elevPM_NDSI_CC_1e-6_ps256_W2_smoothL1loss_full"
+python ablation_study2.py --folder "exp2_elevPM_NDSI_CC_1e-6_ps256_W2_smoothL1loss_full"
 
 '''
 
@@ -1873,7 +1873,19 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     Y[Y < 0] = np.nan
     Y[Y > 10.0] = np.nan
     Y_mask = ~np.isnan(Y[0])
-    
+
+    canopy_cover = X[2, :, :]  # Original X, channel 2 = tree cover
+    # Mask out forested pixels (tree cover > 40%) for exp2
+    Y[0, canopy_cover > 40] = np.nan  # Note: > 40, not <= 40 for exp2!
+
+    # Create final mask
+    Y_mask = ~np.isnan(Y[0])  # Shape: (H, W)
+
+    # Add batch dimension for consistency: (1, C, H, W)
+    X = X[None, :, :, :]
+    Y = Y[None, :, :, :]
+    Y_mask = Y_mask[None, :, :]
+
     # Initialize reconstruction arrays
     reconstruction = np.zeros((H, W), dtype=np.float32)
     weight_map = np.zeros((H, W), dtype=np.float32)
