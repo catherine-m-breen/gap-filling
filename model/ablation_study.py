@@ -901,13 +901,12 @@ def analyze_importance_by_forest_cover(model, test_x, test_y, test_masks,
     # Create bins based on percentiles for equal sample sizes
     # Or use linear bins from min to max
 
-
     forest_cover_mean = norm_mean[0, 0, 0, 0]  # Channel 0 mean
     forest_cover_std = norm_std[0, 0, 0, 0]    # Channel 0 std
 
     # Denormalize to original scale
     all_forest_cover_denorm = all_forest_cover * forest_cover_std + forest_cover_mean
-    
+    all_forest_cover = all_forest_cover_denorm
     forest_cover_bins = np.linspace(all_forest_cover.min(), all_forest_cover.max(), n_bins + 1)
     bin_centers = (forest_cover_bins[:-1] + forest_cover_bins[1:]) / 2
     
@@ -1694,14 +1693,14 @@ def run(folder):
     print("RUNNING FEATURE ABLATION STUDY")
     print("="*80)
     
-    ablation_results, permutation_results, baseline_metrics = run_ablation_study(
-        checkpoint_dir, test_x_patches_norm, test_y_patches_norm, test_y_mask_patches,
-        y_mean, y_std, device, save_dir
-    )
+    # ablation_results, permutation_results, baseline_metrics = run_ablation_study(
+    #     checkpoint_dir, test_x_patches_norm, test_y_patches_norm, test_y_mask_patches,
+    #     y_mean, y_std, device, save_dir
+    # )
     
-    # Create visualizations
-    plot_feature_importance(ablation_results, permutation_results, 
-                           baseline_metrics, save_dir)
+    # # Create visualizations
+    # plot_feature_importance(ablation_results, permutation_results, 
+    #                        baseline_metrics, save_dir)
     
     # ========================================
     # STEP 7: Forest cover analysis (on patches)
@@ -1729,14 +1728,14 @@ def run(folder):
     print("-"*80)
     
     # Ablation study summary
-    sorted_by_ablation = sorted(ablation_results.items(),
-                               key=lambda x: x[1]['rmse_drop'],
-                               reverse=True)
+    # sorted_by_ablation = sorted(ablation_results.items(),
+    #                            key=lambda x: x[1]['rmse_drop'],
+    #                            reverse=True)
     
-    print("\nTop 5 most important features (by RMSE drop):")
-    for i, (feature, results) in enumerate(sorted_by_ablation[:5], 1):
-        print(f"  {i}. {feature}: RMSE Δ = {results['rmse_drop']:+.4f} m, "
-              f"R² Drop = {results['r2_drop']:.4f}")
+    # print("\nTop 5 most important features (by RMSE drop):")
+    # for i, (feature, results) in enumerate(sorted_by_ablation[:5], 1):
+    #     print(f"  {i}. {feature}: RMSE Δ = {results['rmse_drop']:+.4f} m, "
+    #           f"R² Drop = {results['r2_drop']:.4f}")
     
     # Per-flight summary
     print("\nPer-flight SWE totals:")
