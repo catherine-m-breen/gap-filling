@@ -1801,6 +1801,7 @@ def analyze_per_flight_swe(model, test_x_full, test_y_full, test_masks_full,
     print("="*80)
     
     return results_df, basin_summary
+
 def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id, 
                                 norm_mean, norm_std, y_mean, y_std,
                                 patch_size=256, stride=128, min_valid_fraction=0.3,
