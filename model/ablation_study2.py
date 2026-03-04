@@ -951,9 +951,9 @@ def convert_to_patches(test_x, test_y, test_y_mask, filenames_test,
         _, C, H, W = data.shape
         
         if mask.ndim == 3:
-        mask = mask.squeeze()  # Remove extra dimensions
+            mask = mask.squeeze()  # Remove extra dimensions
         elif mask.ndim == 4:
-        mask = mask[0, 0, :, :]  # Extract (H, W) from (1, 1, H, W)
+            mask = mask[0, 0, :, :]  # Extract (H, W) from (1, 1, H, W)
         
 
         for row in range(0, H - patch_size + 1, stride):
