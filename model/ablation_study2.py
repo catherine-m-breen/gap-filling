@@ -919,7 +919,9 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         
         X = X[None, :, :, :]
         Y = Y[None, :, :, :]
-        Y_mask = Y_mask[None, :, :, :].squeeze()
+        import IPython
+        IPython.embed()
+        Y_mask = Y_mask[None, :, :].squeeze()
         
         test_x.append(X)
         test_y.append(Y)
