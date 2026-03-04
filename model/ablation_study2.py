@@ -909,6 +909,13 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         Y[Y < 0] = np.nan
         Y[Y > 10.0] = np.nan
         Y_mask = ~np.isnan(Y)
+
+        canopy_cover = X[2, :, :]  # Original X, channel 2 = tree cover
+        # Mask out forested pixels (tree cover > 40%) for exp2
+        Y[0, canopy_cover > 40] = np.nan  # Note: > 40, not <= 40 for exp2!
+
+        # Create final mask
+        Y_mask = ~np.isnan(Y[0])  # Shape: (H, W)
         
         X = X[None, :, :, :]
         Y = Y[None, :, :, :]
@@ -2010,7 +2017,7 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     
     # Plot 1: Actual SWE
     ax1 = fig.add_subplot(gs[0, 0])
-    im1 = ax1.imshow(actual_swe, cmap='viridis', vmin=vmin_swe, vmax=vmax_swe) #reconstruction
+    im1 = ax1.imshow(reconstruction, cmap='viridis', vmin=vmin_swe, vmax=vmax_swe) #reconstruction
     ax1.set_title('Actual SWE (m)', fontsize=14, fontweight='bold')
     ax1.axis('off')
     cbar1 = plt.colorbar(im1, ax=ax1, fraction=0.046, pad=0.04)
