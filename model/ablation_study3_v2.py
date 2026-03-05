@@ -1049,7 +1049,8 @@ def analyze_importance_by_forest_cover(model, test_x, test_y, test_masks,
         'Tb 37V': [3],
         'Tb 19H': [4],
         'Tb 19V': [5],
-        'VIIRS NDSI': [6]
+        'VIIRS NDSI': [6],
+        'Noisy SWE': [8],
     }
     
     # Forest cover is channel 0
@@ -1239,7 +1240,8 @@ def analyze_importance_by_forest_cover(model, test_x, test_y, test_masks,
         'Tb 37V': '#ff7f0e',  # Orange
         'Tb 19H': '#2ca02c',  # Green
         'Tb 19V': '#d62728',  # Red
-        'VIIRS NDSI': '#9467bd'      # Purple
+        'VIIRS NDSI': '#9467bd',      # Purple
+        'Noisy SWE': 'black'
     }
     
     linestyles = {
@@ -1247,7 +1249,9 @@ def analyze_importance_by_forest_cover(model, test_x, test_y, test_masks,
         'Tb 37V': '-',
         'Tb 19H': '-',
         'Tb 19V': '-',
-        'VIIRS NDSI': '--'
+        'VIIRS NDSI': '--',
+        'Noisy SWE': '-',
+
     }
     
     markers = {
@@ -1255,7 +1259,8 @@ def analyze_importance_by_forest_cover(model, test_x, test_y, test_masks,
         'Tb 37V': 's',
         'Tb 19H': '^',
         'Tb 19V': 'D',
-        'VIIRS NDSI': '*'
+        'VIIRS NDSI': '*',
+        'Noisy SWE': '-',
     }
     
     # Plot 1: Absolute importance
@@ -1878,23 +1883,91 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     print(f"Loaded data shape: X={X.shape}, Y={Y.shape}")
     
     # Process channels (same as training)
+    # viirs_raw = X[8, :, :]
+    # viirs_mask = (~np.isnan(viirs_raw)).astype(np.float32)
+    # viirs_filled = np.nan_to_num(viirs_raw, nan=0.0)
+    
+    # channels_except_viirs = [2, 3, 4, 5, 6, 7]
+    # all_but_viirs = X[channels_except_viirs, :, :]
+    # all_but_viirs[all_but_viirs == -9999] = 0
+    # all_but_viirs_filled = np.nan_to_num(all_but_viirs, nan=0.0)
+    
+    # X_processed = np.concatenate([
+    #     all_but_viirs_filled,
+    #     viirs_filled[np.newaxis, :, :],
+    #     viirs_mask[np.newaxis, :, :]
+    # ], axis=0)
+    
+    # Get dimensions
+    # C, H, W = X_processed.shape
+
+    #########################################
+         # Load FULL zarr file
+    # z = zarr.open(str(zarr_path), mode='r')
+    # X = np.array(z['X'], dtype=np.float32)
+    # Y = np.array(z['Y'], dtype=np.float32)
+        
+        # Process channels (same as training)
+    # if skip_tb_channels:
     viirs_raw = X[8, :, :]
     viirs_mask = (~np.isnan(viirs_raw)).astype(np.float32)
     viirs_filled = np.nan_to_num(viirs_raw, nan=0.0)
-    
+        
     channels_except_viirs = [2, 3, 4, 5, 6, 7]
     all_but_viirs = X[channels_except_viirs, :, :]
     all_but_viirs[all_but_viirs == -9999] = 0
     all_but_viirs_filled = np.nan_to_num(all_but_viirs, nan=0.0)
-    
-    X_processed = np.concatenate([
+        
+    X = np.concatenate([
         all_but_viirs_filled,
         viirs_filled[np.newaxis, :, :],
         viirs_mask[np.newaxis, :, :]
     ], axis=0)
+        
+        # import IPython
+        # IPython.embed()
+    Y[Y < 0] = np.nan
+    Y[Y > 10.0] = np.nan
+    Y_mask = ~np.isnan(Y)
+
+    canopy_cover = X[2, :, :]  # Original X, channel 2 = tree cover
+    # Mask out forested pixels (tree cover > 40%) for exp2
+    Y[0, canopy_cover <= 40] = np.nan  # Note: > 40, not <= 40 for exp2!
+
+    # Create final mask
+    Y_mask = ~np.isnan(Y[0])  # Shape: (H, W)
     
-    # Get dimensions
-    C, H, W = X_processed.shape
+    
+    X = X[None, :, :, :]
+    Y = Y[None, :, :, :]
+    #  import IPython
+    # IPython.embed()
+    Y_mask = Y_mask if len(Y_mask) == 2 else Y_mask.squeeze()
+
+
+    ####### now do the X part -- 2 new channels #### 
+    Y_unforested = np.zeros_like(Y[0])  # (H, W) - initialize with zeros from tree channel
+    unforested_mask = (X[:,2, :, :] <= 40)
+    Y_unforested[unforested_mask] = Y[0, unforested_mask] # make an unforested mask of Y where pixels are >= 40
+
+    # Add Gaussian noise to unforested areas only
+    noise = np.random.normal(loc=0, scale=0.25, size=Y_unforested.shape)  # 25cm noise
+    Y_unforested[unforested_mask] += noise[unforested_mask]
+    Y_unforested = np.maximum(Y_unforested, 0) ## clip because we can't have negative values 
+
+    Y_unforested = np.nan_to_num(Y_unforested, nan=0.0)
+    Y_unforested_mask = (Y_unforested > 0).astype(np.float32)
+
+    # ### now do the Y part 
+    # Y[0, X[0, :, :] <= 40] = np.nan
+    # Y_mask = ~np.isnan(Y)  # Boolean mask: True where valid, False where NaN ## pass this through so we can only look where we have data! 
+
+    ## then you need to concantenate this at the end!!! 
+    X_processed = np.concatenate([X,Y_unforested[np.newaxis, :, :], Y_unforested_mask[np.newaxis, :, :]], axis=1)
+
+    #########################################
+
+    _, C, H, W = X_processed.shape
     
     print(f"Processed X shape: {X_processed.shape}")
     print(f"Norm mean shape: {norm_mean.shape}")
@@ -1922,23 +1995,24 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     print(f"Reshaped norm_mean: {norm_mean_2d.shape}")
     print(f"Reshaped norm_std: {norm_std_2d.shape}")
     
-    # Create mask for Y
-    Y[Y < 0] = np.nan
-    Y[Y > 10.0] = np.nan
-    Y_mask = ~np.isnan(Y[0])
+        #### I think we did this earlier ! ####
+    # Create mask for Y 
+    # Y[Y < 0] = np.nan
+    # Y[Y > 10.0] = np.nan
+    # Y_mask = ~np.isnan(Y[0])
 
-    canopy_cover = X[2, :, :]  # Original X, channel 2 = tree cover
-    # Mask out forested pixels (tree cover > 40%) for exp2
-    Y[0, canopy_cover <= 40] = np.nan  # Note: > 40, not <= 40 for exp2!
+    # canopy_cover = X[2, :, :]  # Original X, channel 2 = tree cover
+    # # Mask out forested pixels (tree cover > 40%) for exp2
+    # Y[0, canopy_cover <= 40] = np.nan  # Note: > 40, not <= 40 for exp2!
 
-    # Create final mask
-    Y_mask = ~np.isnan(Y[0])  # Shape: (H, W)
+    # # Create final mask
+    # Y_mask = ~np.isnan(Y[0])  # Shape: (H, W)
 
-    # Add batch dimension for consistency: (1, C, H, W)
-    X = X[None, :, :, :]
-    Y = Y[None, :, :, :]
-    #Y_mask = Y_mask[None, :, :].squeeze()
-    Y_mask = Y_mask if len(Y_mask) == 2 else Y_mask.squeeze()
+    # # Add batch dimension for consistency: (1, C, H, W)
+    # X = X[None, :, :, :]
+    # Y = Y[None, :, :, :]
+    # #Y_mask = Y_mask[None, :, :].squeeze()
+    # Y_mask = Y_mask if len(Y_mask) == 2 else Y_mask.squeeze()
 
     # Initialize reconstruction arrays
     reconstruction = np.zeros((H, W), dtype=np.float32)
@@ -1953,6 +2027,8 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     patch_count = 0
     valid_patch_count = 0
     
+    X_processed = X_processed[0]  # Remove batch dim: (10, 854, 952)
+
     with torch.no_grad():
         for row in tqdm(range(0, H - patch_size + 1, stride), desc="Rows"):
             for col in range(0, W - patch_size + 1, stride):

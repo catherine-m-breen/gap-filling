@@ -525,7 +525,7 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
 
         # Add Gaussian noise to unforested areas only
         noise = np.random.normal(loc=0, scale=0.25, size=Y_unforested.shape)  # 25cm noise
-        Y_unforested[unforested_mask] += noise[unforested_mask]
+        #Y_unforested[unforested_mask] += noise[unforested_mask] ## take out the noise 
         Y_unforested = np.maximum(Y_unforested, 0) ## clip because we can't have negative values 
 
         Y_unforested = np.nan_to_num(Y_unforested, nan=0.0)
@@ -1082,7 +1082,7 @@ def main():
     stride = int(patch_size/ 2) #64  # 50% overlap
     min_valid_fraction = 0.3  # Skip patches with <30% valid pixels
     
-    checkpoint_dir = "./exp3_elevPM_NDSI_CC_1e-6_ps256_SmoothL1Loss"
+    checkpoint_dir = "./exp3_elevPM_NDSI_CC_1e-6_ps256_SmoothL1Loss_notNoisy"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Load FULL zarr files
