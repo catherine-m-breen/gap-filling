@@ -2477,14 +2477,14 @@ def run(folder):
     print("RUNNING FEATURE ABLATION STUDY")
     print("="*80)
     
-    # ablation_results, permutation_results, baseline_metrics = run_ablation_study(
-    #     checkpoint_dir, test_x_patches_norm, test_y_patches_norm, test_y_mask_patches,
-    #     y_mean, y_std, device, save_dir
-    # )
+    ablation_results, permutation_results, baseline_metrics = run_ablation_study(
+        checkpoint_dir, test_x_patches_norm, test_y_patches_norm, test_y_mask_patches,
+        y_mean, y_std, device, save_dir
+    )
     
-    # # Create visualizations
-    # plot_feature_importance(ablation_results, permutation_results, 
-    #                        baseline_metrics, save_dir)
+    # Create visualizations
+    plot_feature_importance(ablation_results, permutation_results, 
+                           baseline_metrics, save_dir)
     
     # ========================================
     # STEP 7: Forest cover analysis (on patches)
@@ -2529,11 +2529,11 @@ def run(folder):
     # Visualize first 3 test flights (or specify particular ones)
     flights_to_visualize = filenames_test[:3]  # Modify as needed
     
-    # Or specify particular flights:
-    # flights_to_visualize = [
-    #     'ASO_Dolores_2023Apr06_swe_50m.tif',
-    #     'ASO_Conejos_2023May05_swe_50m.tif'
-    # ]
+    #Or specify particular flights:
+    flights_to_visualize = [
+        'ASO_Dolores_2023Apr06_swe_50m.tif',
+        'ASO_Conejos_2023May05_swe_50m.tif'
+    ]
     
     reconstruction_results = []
     
@@ -2589,14 +2589,14 @@ def run(folder):
     print("-"*80)
     
     # Ablation study summary
-    # sorted_by_ablation = sorted(ablation_results.items(),
-    #                            key=lambda x: x[1]['rmse_drop'],
-    #                            reverse=True)
+    sorted_by_ablation = sorted(ablation_results.items(),
+                               key=lambda x: x[1]['rmse_drop'],
+                               reverse=True)
     
-    # print("\nTop 5 most important features (by RMSE drop):")
-    # for i, (feature, results) in enumerate(sorted_by_ablation[:5], 1):
-    #     print(f"  {i}. {feature}: RMSE Δ = {results['rmse_drop']:+.4f} m, "
-    #           f"R² Drop = {results['r2_drop']:.4f}")
+    print("\nTop 5 most important features (by RMSE drop):")
+    for i, (feature, results) in enumerate(sorted_by_ablation[:5], 1):
+        print(f"  {i}. {feature}: RMSE Δ = {results['rmse_drop']:+.4f} m, "
+              f"R² Drop = {results['r2_drop']:.4f}")
     
     # Per-flight summary
     print("\nPer-flight SWE totals:")
