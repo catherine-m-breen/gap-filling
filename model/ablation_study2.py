@@ -1995,6 +1995,8 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     
     
     # Get actual SWE
+    import IPython
+    IPython.embed()
     actual_swe = Y[0]
     
     # Compute error map
