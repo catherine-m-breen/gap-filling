@@ -15,6 +15,9 @@ Features:
 - Channel 7: VIIRS Mask
 - Channel 8: Noisy SWE (Unforested)  ← NEW
 - Channel 9: Noisy SWE Mask  ← NEW
+
+python ablation_study3.py --folder 'exp3_elevPM_NDSI_CC_1e-6_ps256_SmoothL1Loss'
+
 '''
 
 import numpy as np

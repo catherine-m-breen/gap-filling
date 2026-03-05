@@ -1149,7 +1149,7 @@ def analyze_importance_by_forest_cover(model, test_x, test_y, test_masks,
     all_forest_cover = all_forest_cover_denorm
     #forest_cover_bins = np.linspace(all_forest_cover.min(), all_forest_cover.max(), n_bins + 1)
     
-    forest_cover_bins = np.array([0, 20, 40, 60, 80, 100])
+    forest_cover_bins = np.array([40, 60, 80, 100])
     n_bins = len(forest_cover_bins) - 1  # 5 bins
     bin_centers = (forest_cover_bins[:-1] + forest_cover_bins[1:]) / 2
     
@@ -1253,7 +1253,7 @@ def analyze_importance_by_forest_cover(model, test_x, test_y, test_masks,
                   fontsize=15, fontweight='bold')
     ax1.legend(fontsize=11, loc='best', framealpha=0.9)
     ax1.grid(True, alpha=0.3, linestyle='--')
-    ax1.set_xlim(left=bin_forest_cover_means[0], right=100) #right=bin_forest_cover_means[-1])
+    ax1.set_xlim(left=0, right=100) #right=bin_forest_cover_means[-1]) bin_forest_cover_means[0]
     ax1.tick_params(axis='both', labelsize=16)  # Add this to increase tick label size
     
     # Plot 2: Relative importance (normalized to sum to 1 in each bin)
