@@ -1935,7 +1935,8 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     X = X[None, :, :, :]
     Y = Y[None, :, :, :]
     #Y_mask = Y_mask[None, :, :].squeeze()
-    Y_mask = Y_mask if len(Y_mask) == 2 else Y_mask.squeeze()
+    ### but weirdly X and Y are Batch Channel H W 
+    Y_mask = Y_mask if len(Y_mask) == 2 else Y_mask.squeeze() ## want the final thing to be H W !!
 
     # Initialize reconstruction arrays
     reconstruction = np.zeros((H, W), dtype=np.float32)
