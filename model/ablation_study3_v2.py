@@ -906,6 +906,8 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
                 viirs_mask[np.newaxis, :, :]
             ], axis=0)
         
+        import IPython
+        IPython.embed()
         Y[Y < 0] = np.nan
         Y[Y > 10.0] = np.nan
         Y_mask = ~np.isnan(Y)
