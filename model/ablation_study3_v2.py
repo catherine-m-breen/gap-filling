@@ -23,7 +23,7 @@ python ablation_study.py --folder "exp1_elevPM_NDSI_CC_1e-6_ps256_W2_smoothL1los
 Exp 2:
 python ablation_study2.py --folder "exp2_elevPM_NDSI_CC_1e-6_ps256_W2_smoothL1loss_full"
 
-"exp3_elevPM_NDSI_CC_1e-6_ps256_SmoothL1Loss"
+python ablation_study3_v2.py --folder "exp3_elevPM_NDSI_CC_1e-6_ps256_SmoothL1Loss"
 
 '''
 
