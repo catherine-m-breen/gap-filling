@@ -692,6 +692,8 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
             all_but_viirs_filled = np.nan_to_num(all_but_viirs, nan=0.0)
             
             # Get noisy SWE channels (14 and 15)
+            import IPython
+            IPython.embed()
             noisy_swe = X[14, :, :]  # Noisy SWE (Unforested)
             noisy_swe_mask = X[15, :, :]  # Noisy SWE Mask
             
