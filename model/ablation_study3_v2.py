@@ -1260,7 +1260,7 @@ def analyze_importance_by_forest_cover(model, test_x, test_y, test_masks,
         'Tb 19H': '^',
         'Tb 19V': 'D',
         'VIIRS NDSI': '*',
-        'Noisy SWE': '-',
+        'Noisy SWE': 'x',
     }
     
     # Plot 1: Absolute importance
