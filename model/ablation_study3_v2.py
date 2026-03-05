@@ -23,6 +23,8 @@ python ablation_study.py --folder "exp1_elevPM_NDSI_CC_1e-6_ps256_W2_smoothL1los
 Exp 2:
 python ablation_study2.py --folder "exp2_elevPM_NDSI_CC_1e-6_ps256_W2_smoothL1loss_full"
 
+"exp3_elevPM_NDSI_CC_1e-6_ps256_SmoothL1Loss"
+
 '''
 
 import numpy as np
@@ -1904,6 +1906,8 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     # norm_mean and norm_std have shape (1, C, 1, 1)
     # We need shape (C, 1, 1) for broadcasting with (C, H, W)
     
+    import IPython 
+    IPython.embed()
     if norm_mean.shape == (1, C, 1, 1):
         # Squeeze out the batch dimension
         norm_mean_2d = norm_mean[0, :, 0, 0]  # Shape: (C,)
