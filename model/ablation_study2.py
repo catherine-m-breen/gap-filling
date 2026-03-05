@@ -912,7 +912,7 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
 
         canopy_cover = X[2, :, :]  # Original X, channel 2 = tree cover
         # Mask out forested pixels (tree cover > 40%) for exp2
-        Y[0, canopy_cover > 40] = np.nan  # Note: > 40, not <= 40 for exp2!
+        Y[0, canopy_cover <= 40] = np.nan  # Note: > 40, not <= 40 for exp2!
 
         # Create final mask
         Y_mask = ~np.isnan(Y[0])  # Shape: (H, W)
@@ -1899,7 +1899,7 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
 
     canopy_cover = X[2, :, :]  # Original X, channel 2 = tree cover
     # Mask out forested pixels (tree cover > 40%) for exp2
-    Y[0, canopy_cover > 40] = np.nan  # Note: > 40, not <= 40 for exp2!
+    Y[0, canopy_cover <= 40] = np.nan  # Note: > 40, not <= 40 for exp2!
 
     # Create final mask
     Y_mask = ~np.isnan(Y[0])  # Shape: (H, W)
@@ -1995,8 +1995,8 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     
     
     # Get actual SWE
-    import IPython
-    IPython.embed()
+    # import IPython
+    # IPython.embed()
     actual_swe = Y[0]
     
     # Compute error map
@@ -2005,21 +2005,31 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     
     # Compute metrics
     valid_mask = Y_mask
-    pred_valid = reconstruction[valid_mask]
-    actual_valid = actual_swe[valid_mask]
+    # pred_valid = reconstruction[valid_mask]
     
-    mae = np.mean(np.abs(pred_valid - actual_valid))
-    rmse = np.sqrt(np.mean((pred_valid - actual_valid)**2))
-    r2 = r2_score(actual_valid, pred_valid)
-    bias = np.mean(pred_valid - actual_valid)
+    pred_valid = reconstruction.copy()
+    pred_valid[~valid_mask] = np.nan
+    actual_valid = actual_swe.squeeze().copy() 
+    actual_valid[~valid_mask] = np.nan
     
+   # Use NaN-aware functions
+    mae = np.nanmean(np.abs(pred_valid - actual_valid))
+    rmse = np.sqrt(np.nanmean((pred_valid - actual_valid)**2))
+    bias = np.nanmean(pred_valid - actual_valid)
+
+    # For R², sklearn doesn't handle NaNs, so extract valid pixels as 1D arrays
+    pred_valid_1d = pred_valid[valid_mask]  # Flatten to 1D, only valid pixels
+    actual_valid_1d = actual_valid[valid_mask]  # Flatten to 1D, only valid pixels
+    r2 = r2_score(actual_valid_1d, pred_valid_1d)
+
     print(f"\nReconstruction Metrics:")
     print(f"  MAE:  {mae:.4f} m")
     print(f"  RMSE: {rmse:.4f} m")
     print(f"  R²:   {r2:.4f}")
     print(f"  Bias: {bias:+.4f} m")
-    import IPython
-    IPython.embed
+
+    # import IPython
+    # IPython.embed
     # ========================================
     # CREATE VISUALIZATION
     # ========================================
@@ -2036,7 +2046,7 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     
     # Plot 1: Actual SWE
     ax1 = fig.add_subplot(gs[0, 0])
-    im1 = ax1.imshow(reconstruction, cmap='viridis', vmin=vmin_swe, vmax=vmax_swe) #reconstruction
+    im1 = ax1.imshow(actual_valid, cmap='viridis', vmin=vmin_swe, vmax=vmax_swe) #reconstruction
     ax1.set_title('Actual SWE (m)', fontsize=14, fontweight='bold')
     ax1.axis('off')
     cbar1 = plt.colorbar(im1, ax=ax1, fraction=0.046, pad=0.04)
@@ -2053,7 +2063,7 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     # Plot 3: Error map (prediction - actual)
     ax3 = fig.add_subplot(gs[0, 2])
     error_limit = np.nanpercentile(np.abs(error_map), 95)
-    im3 = ax3.imshow(error_map, cmap='RdBu_r', vmin=-error_limit, vmax=error_limit)
+    im3 = ax3.imshow(error_map.squeeze(), cmap='RdBu_r', vmin=-error_limit, vmax=error_limit)
     ax3.set_title('Error: Pred - Actual (m)\n(Red=Over, Blue=Under)', 
                   fontsize=14, fontweight='bold')
     ax3.axis('off')
@@ -2066,7 +2076,7 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     
     # Plot 4: Absolute error
     ax4 = fig.add_subplot(gs[1, 0])
-    im4 = ax4.imshow(abs_error_map, cmap='hot_r', vmin=0, vmax=error_limit)
+    im4 = ax4.imshow(abs_error_map.squeeze(), cmap='hot_r', vmin=0, vmax=error_limit)
     ax4.set_title('Absolute Error (m)', fontsize=14, fontweight='bold')
     ax4.axis('off')
     cbar4 = plt.colorbar(im4, ax=ax4, fraction=0.046, pad=0.04)
@@ -2105,48 +2115,55 @@ def reconstruct_and_plot_flight(model, zarr_dir, sample_flight_id,
     
     # Plot 7: Scatter plot
     ax7 = fig.add_subplot(gs[2, 0])
-    
+
+    # Extract valid pixels as 1D arrays (no NaNs)
+    actual_valid_1d = actual_swe.squeeze()[valid_mask]
+    pred_valid_1d = reconstruction[valid_mask]
+
     # Subsample for plotting if too many points
-    n_points = len(actual_valid)
+    n_points = len(actual_valid_1d)
     if n_points > 50000:
         indices = np.random.choice(n_points, 50000, replace=False)
-        plot_actual = actual_valid[indices]
-        plot_pred = pred_valid[indices]
+        plot_actual = actual_valid_1d[indices]
+        plot_pred = pred_valid_1d[indices]
     else:
-        plot_actual = actual_valid
-        plot_pred = pred_valid
-    
-    # Density scatter
+        plot_actual = actual_valid_1d
+        plot_pred = pred_valid_1d
+
+    # Additional safety check: remove any remaining NaNs or infs
+    valid_plot_mask = np.isfinite(plot_actual) & np.isfinite(plot_pred)
+    plot_actual = plot_actual[valid_plot_mask]
+    plot_pred = plot_pred[valid_plot_mask]
+
+    # Now hexbin will work without warnings
     h = ax7.hexbin(plot_actual, plot_pred, gridsize=50, cmap='viridis', 
-                   mincnt=1, linewidths=0.2, edgecolors='face')
-    
+                mincnt=1, linewidths=0.2, edgecolors='face')
+
     # 1:1 line
     max_val = max(plot_actual.max(), plot_pred.max())
     ax7.plot([0, max_val], [0, max_val], 'r--', linewidth=2, label='1:1 Line')
-    
+
     ax7.set_xlabel('Actual SWE (m)', fontsize=12, fontweight='bold')
     ax7.set_ylabel('Predicted SWE (m)', fontsize=12, fontweight='bold')
     ax7.set_title('Pixel-Level Comparison', fontsize=14, fontweight='bold')
     ax7.legend(fontsize=10)
     ax7.grid(alpha=0.3)
     ax7.set_aspect('equal', adjustable='box')
-    
-    # Add metrics text
-    textstr = f'R² = {r2:.3f}\nRMSE = {rmse:.3f} m\nMAE = {mae:.3f} m\nBias = {bias:+.3f} m'
-    props = dict(boxstyle='round', facecolor='wheat', alpha=0.8)
-    ax7.text(0.05, 0.95, textstr, transform=ax7.transAxes, fontsize=11,
-            verticalalignment='top', bbox=props)
-    
-    plt.colorbar(h, ax=ax7, label='Point density')
-    
+
+
     # Plot 8: Error histogram
     ax8 = fig.add_subplot(gs[2, 1])
     
-    errors_valid = error_map[valid_mask]
+    # errors_valid = error_map.copy() 
+    # errors_valid[~valid_mask] = np.nan
+
+    errors_valid = error_map.squeeze()[valid_mask]
+
+    # Use nanmedian for the median calculation (in case any NaNs slipped through)
     ax8.hist(errors_valid, bins=100, color='steelblue', alpha=0.7, edgecolor='black')
     ax8.axvline(x=0, color='red', linestyle='--', linewidth=2, label='Zero error')
     ax8.axvline(x=np.median(errors_valid), color='orange', linestyle='--', 
-               linewidth=2, label=f'Median = {np.median(errors_valid):.3f} m')
+            linewidth=2, label=f'Median = {np.median(errors_valid):.3f} m')
     ax8.set_xlabel('Error (m)', fontsize=12, fontweight='bold')
     ax8.set_ylabel('Pixel Count', fontsize=12, fontweight='bold')
     ax8.set_title('Error Distribution', fontsize=14, fontweight='bold')
