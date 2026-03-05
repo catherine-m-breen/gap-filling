@@ -713,7 +713,39 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         
         Y[Y < 0] = np.nan
         Y[Y > 10.0] = np.nan
-        Y_mask = ~np.isnan(Y)
+        
+
+
+        ### here is our new channel!
+        Y_unforested = np.zeros_like(Y[0])  # (H, W) - initialize with zeros from tree channel
+        unforested_mask = (X[0, :, :] <= 40)
+        Y_unforested[unforested_mask] = Y[0, unforested_mask] # make an unforested mask of Y where pixels are >= 40
+
+        # Add Gaussian noise to unforested areas only
+        noise = np.random.normal(loc=0, scale=0.25, size=Y_unforested.shape)  # 25cm noise
+        Y_unforested[unforested_mask] += noise[unforested_mask]
+        Y_unforested = np.maximum(Y_unforested, 0) ## clip because we can't have negative values 
+
+        Y_unforested = np.nan_to_num(Y_unforested, nan=0.0)
+        Y_unforested_mask = (Y_unforested > 0).astype(np.float32)
+
+        ### now do the Y part 
+        Y[0, X[0, :, :] <= 40] = np.nan
+        Y_mask = ~np.isnan(Y)  # Boolean mask: True where valid, False where NaN ## pass this through so we can only look where we have data! 
+
+        ## then you need to concantenate this at the end!!! 
+        X = np.concatenate([X,Y_unforested[np.newaxis, :, :], Y_unforested_mask[np.newaxis, :, :]], axis=0)
+
+        # Add batch dimension for consistency: (1, C, H, W)
+        X = X[None, :, :, :]
+        Y = Y[None, :, :, :]
+        Y_mask = Y_mask[None, :, :]
+        #Y_mask = Y_mask[None, :, :, :]
+        
+
+        # Y_mask = ~np.isnan(Y)
+
+
         
         X = X[None, :, :, :]
         Y = Y[None, :, :, :]
