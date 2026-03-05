@@ -464,7 +464,8 @@ FEATURE_GROUPS = {
     'VIIRS Mask': [7],
     'VIIRS (both)': [6, 7],
     'Topography (FC+Elev)': [0, 1],
-    'All Remote Sensing': [2, 3, 4, 5, 6]
+    'All Remote Sensing': [2, 3, 4, 5, 6],
+    'Neighboring SWE': [8]
 }
 
 
