@@ -7,6 +7,12 @@ from sklearn.ensemble import RandomForestRegressor
 import joblib
 import os
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from transformers import AutoModel
+
+
 def patch_dinov2_input_channels(backbone, input_channels: int):
     """
     Replace DINOv2's patch embedding conv to accept N input channels.

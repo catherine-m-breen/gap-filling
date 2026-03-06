@@ -1265,7 +1265,7 @@ def main():
     # ---- Adjust learning rate (DINOv2 needs much smaller LR for backbone) ----
     optimizer = torch.optim.AdamW([
         {'params': model.backbone.parameters(), 'lr': 1e-6},   # very small for pretrained
-        {'params': model.input_proj.parameters(), 'lr': 1e-4},
+       # {'params': model.input_proj.parameters(), 'lr': 1e-4},
         {'params': model.decoder.parameters(),  'lr': 1e-4},   # larger for new decoder
     ], weight_decay=1e-4)
 
