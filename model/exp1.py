@@ -1286,7 +1286,7 @@ def main():
     #     def forward(self, predictions, targets):
     #         #IPython.embed()
     #         # Weight proportional to target value (higher SWE = higher weight)
-    #         weights = 1.0 + self.alpha * (targets / (targets.max() + 1e-8))
+    #         weights = 1.0 + self.alpha * (targets / (targets.max() d+ 1e-8))
     #         loss = (predictions - targets) ** 2
     #         weighted_loss = loss * weights
     #         return weighted_loss.mean()

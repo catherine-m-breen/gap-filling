@@ -19,6 +19,7 @@ from pathlib import Path
 import zarr
 from dictionaries import split_basin_dict, flight_to_basin
 import IPython
+from dino_model import DINOv2SWEModelV2  # or whichever version
 print('Starting training script...')
 
 # ============================================================
@@ -1238,14 +1239,34 @@ def main():
     input_channels = first_patch.shape[1]  # (1, C, H, W) -> C
     
     print(f"Detected {input_channels} input channels")
-    model = Model(input_channels=input_channels).to(device)
+
+    # model = Model(input_channels=input_channels).to(device)
+
+    DINO_IMG_SIZE = 252  
+
+    model = DINOv2SWEModelV2(
+        input_channels=input_channels,  # auto-detected (8)
+        dino_model="dinov2_vitb14",     # start with ViT-B; ViT-L if memory allows
+        img_size=DINO_IMG_SIZE,
+        decoder_channels=256,
+        n_freeze_blocks=6,              # unfreeze last 6 of 12 blocks
+    ).to(device)
     
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
     
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.000001)
+
+        # ---- Adjust learning rate (DINOv2 needs much smaller LR for backbone) ----
+    optimizer = torch.optim.AdamW([
+        {'params': model.backbone.parameters(), 'lr': 1e-6},   # very small for pretrained
+       # {'params': model.input_proj.parameters(), 'lr': 1e-4},
+        {'params': model.decoder.parameters(),  'lr': 1e-4},   # larger for new decoder
+    ], weight_decay=1e-4)
+
     #criterion = nn.SmoothL1Loss(beta=1.0) #nn.MSELoss() #nn.L1Loss()
     #criterion = WeightedSmoothL1Loss(beta=1.0, weight_power=2.0)
-    criterion = nn.SmoothL1Loss(beta=1.0)
+    #criterion = nn.SmoothL1Loss(beta=1.0)
+    criterion = nn.MSELoss()
 
     #criterion = TailFocusedLoss(quantile=0.8, magnitude_power=1.5, use_smooth=False)
     # class ValueWeightedMSELoss(nn.Module):
