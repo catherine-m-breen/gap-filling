@@ -38,6 +38,7 @@ from dictionaries import split_basin_dict, flight_to_basin
 import json
 from tqdm import tqdm
 import pandas as pd
+from dino_model import DINOv2SWEModelV2
 
 print('Starting ablation study...')
 
@@ -480,12 +481,19 @@ def run_ablation_study(checkpoint_dir, test_x, test_y, test_masks,
     # Load model
     print("\nLoading model from checkpoint...")
     model_path = os.path.join(checkpoint_dir, 'best_model_cnn.pth')
-    
+
+    DINO_IMG_SIZE = 252  
     # Detect number of input channels from first test patch
     input_channels = test_x[0].shape[1]
     print(f"Detected {input_channels} input channels")
-    
-    model = Model(input_channels=input_channels).to(device)
+    model = DINOv2SWEModelV2(
+        input_channels=input_channels,  # auto-detected (8)
+        dino_model="dinov2_vitb14",     # start with ViT-B; ViT-L if memory allows
+        img_size=DINO_IMG_SIZE,
+        decoder_channels=256,
+        n_freeze_blocks=6,              # unfreeze last 6 of 12 blocks
+    )
+    #model = Model(input_channels=input_channels).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
     
@@ -2292,7 +2300,16 @@ def run(folder):
     
     model_path = os.path.join(checkpoint_dir, 'best_model_cnn.pth')
     input_channels = test_x_patches_norm[0].shape[1]
-    model = Model(input_channels=input_channels).to(device)
+    #model = Model(input_channels=input_channels).to(device)
+    DINO_IMG_SIZE = 252  
+
+    model = DINOv2SWEModelV2(
+        input_channels=input_channels,  # auto-detected (8)
+        dino_model="dinov2_vitb14",     # start with ViT-B; ViT-L if memory allows
+        img_size=DINO_IMG_SIZE,
+        decoder_channels=256,
+        n_freeze_blocks=6,              # unfreeze last 6 of 12 blocks
+    ).to(device) 
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
     print(f"Loaded model from: {model_path}")

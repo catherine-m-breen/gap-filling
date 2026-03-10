@@ -17,9 +17,10 @@ from sklearn.metrics import mean_absolute_error, r2_score, mean_squared_error
 import os
 from pathlib import Path
 import zarr
-from dictionaries import split_basin_dict, flight_to_basin
+from dictionaries import split_basin_dict, flight_to_basin, flight_split_dict
 import IPython
 from dino_model import DINOv2SWEModelV2  # or whichever version
+
 print('Starting training script...')
 
 # ============================================================
@@ -438,16 +439,19 @@ def load_full_zarr_files(zarr_dir, split_dict, flight_to_basin_dict, skip_tb_cha
         
         basin = flight_to_basin_dict[tif_name]
         
-        # Determine split
-        split = None
-        for split_name, basins in split_dict.items():
-            if basin in basins:
-                split = split_name
-                break
+        ####### location split #######
+        # # Determine split
+        # split = None
+        # for split_name, basins in split_dict.items():
+        #     if basin in basins:
+        #         split = split_name
+        #         break
         
-        if split is None:
-            print(f"  Warning: Basin {basin} not in split_dict, skipping")
-            continue
+        # if split is None:
+        #     print(f"  Warning: Basin {basin} not in split_dict, skipping")
+        #     continue
+
+        split = flight_split_dict.get(tif_name, None)
         
         # Load FULL zarr file
         z = zarr.open(str(zarr_path), mode='r')
